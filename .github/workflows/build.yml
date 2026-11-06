@@ -17,8 +17,29 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: 17
+
+    - name: Install AAPT2
+      shell: bash
+      run: |
+        AAPT2_VERSION="9.5.0-16666295"
+
+        URL="https://dl.google.com/dl/android/maven2/com/android/tools/build/aapt2/${AAPT2_VERSION}/aapt2-${AAPT2_VERSION}-linux.jar"
+
+        mkdir -p "$HOME/aapt2"
+        curl -fL "$URL" -o "$HOME/aapt2/aapt2.jar"
+
+        cd "$HOME/aapt2"
+        unzip -oq aapt2.jar
+        chmod +x aapt2
+
+        echo "android.aapt2FromMavenOverride=$HOME/aapt2/aapt2" >> "$GITHUB_WORKSPACE/gradle.properties"
+
+    - name: Verify AAPT2
+      run: aapt2 version
+
     - name: Build with Gradle
       run: ./gradlew --no-daemon clean assembleDebug testDebug
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
