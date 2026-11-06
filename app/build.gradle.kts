@@ -111,6 +111,9 @@ dependencies {
     implementation(libs.conscrypt)
     implementation(libs.bouncycastle)
 
+    implementation(libs.androidx.compose.material.icons.core)
+    implementation(libs.kotlinx.coroutines.android)
+
     implementation(libs.acra.mail)
     implementation(libs.acra.dialog)
 

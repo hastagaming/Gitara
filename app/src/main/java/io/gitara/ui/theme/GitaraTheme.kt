@@ -19,9 +19,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.gitara.hosting.GitHost
 
-private data class Accent(val light: Color, val dark: Color)
+internal data class Accent(val light: Color, val dark: Color)
 
-private fun accentFor(host: GitHost): Accent = when (host) {
+internal fun accentFor(host: GitHost): Accent = when (host) {
     GitHost.GITHUB -> Accent(Color(0xFF0969DA), Color(0xFF2F81F7))
     GitHost.GITLAB -> Accent(Color(0xFFE24329), Color(0xFFFC6D26))
     GitHost.BITBUCKET -> Accent(Color(0xFF0052CC), Color(0xFF2684FF))

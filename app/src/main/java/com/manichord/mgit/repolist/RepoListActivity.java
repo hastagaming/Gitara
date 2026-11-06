@@ -3,27 +3,17 @@ package com.manichord.mgit.repolist;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
-import androidx.lifecycle.ViewModelProviders;
-
-import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import androidx.databinding.DataBindingUtil;
+import android.content.res.Configuration;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
-import android.provider.Settings;
-import androidx.core.view.MenuItemCompat;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.widget.SearchView;
 import android.widget.Toast;
 
-import com.manichord.mgit.ViewHelperKt;
-import com.manichord.mgit.clone.CloneViewModel;
-import com.manichord.mgit.common.OnActionClickListener;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+
 import com.manichord.mgit.transport.MGitHttpConnectionFactory;
 
 import java.io.File;
@@ -31,6 +21,10 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 
+import io.gitara.ui.repolist.CloneRequest;
+import io.gitara.ui.repolist.RepoListComposeEntry;
+import io.gitara.ui.repolist.RepoListController;
+import io.gitara.ui.repolist.RepoListHost;
 import me.sheimi.android.activities.SheimiFragmentActivity;
 import me.sheimi.sgit.MGitApplication;
 import me.sheimi.sgit.R;
@@ -38,105 +32,33 @@ import me.sheimi.sgit.activities.RepoDetailActivity;
 import me.sheimi.sgit.activities.UserSettingsActivity;
 import me.sheimi.sgit.activities.explorer.ExploreFileActivity;
 import me.sheimi.sgit.activities.explorer.ImportRepositoryActivity;
-import me.sheimi.sgit.adapters.RepoListAdapter;
 import me.sheimi.sgit.database.RepoDbManager;
 import me.sheimi.sgit.database.models.Repo;
-import me.sheimi.sgit.databinding.ActivityMainBinding;
 import me.sheimi.sgit.dialogs.DummyDialogListener;
 import me.sheimi.sgit.dialogs.ImportLocalRepoDialog;
 import me.sheimi.sgit.repo.tasks.repo.CloneTask;
 import me.sheimi.sgit.ssh.PrivateKeyUtils;
 import timber.log.Timber;
 
-public class RepoListActivity extends SheimiFragmentActivity {
-
-    private Context mContext;
-    private RepoListAdapter mRepoListAdapter;
+public class RepoListActivity extends SheimiFragmentActivity implements RepoListHost {
 
     private static final int REQUEST_IMPORT_REPO = 0;
 
-    private ActivityMainBinding binding;
-
-    public enum ClickActions {
-        CLONE, CANCEL
-    }
+    private final RepoListController controller = new RepoListController();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        RepoListViewModel viewModel = ViewModelProviders.of(this).get(RepoListViewModel.class);
-        CloneViewModel cloneViewModel = ViewModelProviders.of(this).get(CloneViewModel.class);
-
-        binding = DataBindingUtil.setContentView(this, R.layout.activity_main);
-        binding.setLifecycleOwner(this);
-        binding.setCloneViewModel(cloneViewModel);
-        binding.setViewModel(viewModel);
-        binding.setClickHandler(new OnActionClickListener() {
-            @Override
-            public void onActionClick(String action) {
-                if (ClickActions.CLONE.name().equals(action)) {
-                    cloneRepo();
-                } else {
-                    hideCloneView();
-                }
-            }
-        });
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().hide();
+        }
+        setContentView(RepoListComposeEntry.create(this, controller, this));
+        applySystemBarIcons();
 
         PrivateKeyUtils.migratePrivateKeys();
-
         initUpdatedSSL();
-
-        mRepoListAdapter = new RepoListAdapter(this);
-        binding.repoList.setAdapter(mRepoListAdapter);
-        mRepoListAdapter.queryAllRepo();
-        binding.repoList.setOnItemClickListener(mRepoListAdapter);
-        binding.repoList.setOnItemLongClickListener(mRepoListAdapter);
-        mContext = getApplicationContext();
-
-        Uri uri = this.getIntent().getData();
-        if (uri != null) {
-            URL mRemoteRepoUrl = null;
-            try {
-                mRemoteRepoUrl = new URL(uri.getScheme(), uri.getHost(), uri.getPort(), uri.getPath());
-            } catch (MalformedURLException e) {
-                Toast.makeText(mContext, R.string.invalid_url, Toast.LENGTH_LONG).show();
-                Timber.e(e);
-            }
-
-            if (mRemoteRepoUrl != null) {
-                String remoteUrl = mRemoteRepoUrl.toString();
-                String repoName = remoteUrl.substring(remoteUrl.lastIndexOf("/") + 1);
-                StringBuilder repoUrlBuilder = new StringBuilder(remoteUrl);
-
-                //need git extension to clone some repos
-                if (!remoteUrl.toLowerCase().endsWith(getString(R.string.git_extension))) {
-                    repoUrlBuilder.append(getString(R.string.git_extension));
-                } else { //if has git extension remove it from repository name
-                    repoName = repoName.substring(0, repoName.lastIndexOf('.'));
-                }
-                //Check if there are others repositories with same remote
-                List<Repo> repositoriesWithSameRemote = Repo.getRepoList(mContext, RepoDbManager.searchRepo(remoteUrl));
-
-                //if so, just open it
-                if (repositoriesWithSameRemote.size() > 0) {
-                    Toast.makeText(mContext, R.string.repository_already_present, Toast.LENGTH_SHORT).show();
-                    Intent intent = new Intent(mContext, RepoDetailActivity.class);
-                    intent.putExtra(Repo.TAG, repositoriesWithSameRemote.get(0));
-                    startActivity(intent);
-                } else if (Repo.getDir(((MGitApplication) getApplicationContext()).getPrefenceHelper(), repoName).exists()) {
-                    // Repository with name end already exists, see https://github.com/maks/MGit/issues/289
-                    cloneViewModel.setRemoteUrl(repoUrlBuilder.toString());
-                    showCloneView();
-                } else {
-                    final String cloningStatus = getString(R.string.cloning);
-                    Repo mRepo = Repo.createRepo(repoName, repoUrlBuilder.toString(), cloningStatus);
-                    Boolean isRecursive = true;
-                    CloneTask task = new CloneTask(mRepo, true, cloningStatus, null);
-                    task.executeTask();
-                }
-            }
-        }
+        handleViewIntent();
     }
 
     @Override
@@ -147,42 +69,117 @@ public class RepoListActivity extends SheimiFragmentActivity {
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.main, menu);
-        MenuItem searchItem = menu.findItem(R.id.action_search);
-        configSearchAction(searchItem);
-        return true;
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            controller.refresh();
+        }
+    }
+
+    private void applySystemBarIcons() {
+        boolean dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
+        WindowInsetsControllerCompat insets =
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        insets.setAppearanceLightStatusBars(!dark);
+        insets.setAppearanceLightNavigationBars(!dark);
+    }
+
+    private void handleViewIntent() {
+        Uri uri = this.getIntent().getData();
+        if (uri == null) {
+            return;
+        }
+        Context context = getApplicationContext();
+        URL remoteRepoUrl = null;
+        try {
+            remoteRepoUrl = new URL(uri.getScheme(), uri.getHost(), uri.getPort(), uri.getPath());
+        } catch (MalformedURLException e) {
+            Toast.makeText(context, R.string.invalid_url, Toast.LENGTH_LONG).show();
+            Timber.e(e);
+        }
+        if (remoteRepoUrl == null) {
+            return;
+        }
+
+        String remoteUrl = remoteRepoUrl.toString();
+        String repoName = remoteUrl.substring(remoteUrl.lastIndexOf("/") + 1);
+        StringBuilder repoUrlBuilder = new StringBuilder(remoteUrl);
+
+        // need git extension to clone some repos
+        if (!remoteUrl.toLowerCase().endsWith(getString(R.string.git_extension))) {
+            repoUrlBuilder.append(getString(R.string.git_extension));
+        } else { // if has git extension remove it from repository name
+            repoName = repoName.substring(0, repoName.lastIndexOf('.'));
+        }
+
+        // Check if there are others repositories with same remote
+        List<Repo> repositoriesWithSameRemote = Repo.getRepoList(context, RepoDbManager.searchRepo(remoteUrl));
+
+        if (repositoriesWithSameRemote.size() > 0) {
+            Toast.makeText(context, R.string.repository_already_present, Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(context, RepoDetailActivity.class);
+            intent.putExtra(Repo.TAG, repositoriesWithSameRemote.get(0));
+            startActivity(intent);
+        } else if (Repo.getDir(((MGitApplication) getApplicationContext()).getPrefenceHelper(), repoName).exists()) {
+            // Repository with name already exists, see https://github.com/hastagaming/Gitara/issues/289
+            controller.openClone(repoUrlBuilder.toString());
+        } else {
+            final String cloningStatus = getString(R.string.cloning);
+            Repo repo = Repo.createRepo(repoName, repoUrlBuilder.toString(), cloningStatus);
+            CloneTask task = new CloneTask(repo, true, cloningStatus, null);
+            task.executeTask();
+        }
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        Intent intent;
-        int itemId = item.getItemId();
-        if (itemId == R.id.action_new) {
-            showCloneView();
-            return true;
-        } else if (itemId == R.id.action_import_repo) {
-            intent = new Intent(this, ImportRepositoryActivity.class);
-            startActivityForResult(intent, REQUEST_IMPORT_REPO);
-            forwardTransition();
-            return true;
-        } else if (itemId == R.id.action_settings) {
-            intent = new Intent(this, UserSettingsActivity.class);
-            startActivity(intent);
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
+    public void onOpenRepo(Repo repo) {
+        Intent intent = new Intent(this, RepoDetailActivity.class);
+        intent.putExtra(Repo.TAG, repo);
+        startActivity(intent);
+        forwardTransition();
     }
 
-    public void configSearchAction(MenuItem searchItem) {
-        SearchView searchView = (SearchView) searchItem.getActionView();
-        if (searchView == null)
-            return;
-        SearchListener searchListener = new SearchListener();
-        MenuItemCompat.setOnActionExpandListener(searchItem, searchListener);
-        searchView.setIconifiedByDefault(true);
-        searchView.setOnQueryTextListener(searchListener);
+    @Override
+    public void onImportRepo() {
+        Intent intent = new Intent(this, ImportRepositoryActivity.class);
+        startActivityForResult(intent, REQUEST_IMPORT_REPO);
+        forwardTransition();
+    }
+
+    @Override
+    public void onOpenSettings() {
+        startActivity(new Intent(this, UserSettingsActivity.class));
+    }
+
+    @Override
+    public String onCloneRequested(CloneRequest request) {
+        String url = request.getRemoteUrl();
+        String name = request.getFolderName();
+        if (url.isEmpty()) {
+            return "Remote URL is required.";
+        }
+        if (name.isEmpty()) {
+            return "Folder name is required.";
+        }
+        if (name.contains("/") || name.contains("\\") || name.equals(".") || name.equals("..")) {
+            return "Folder name is not valid.";
+        }
+        File target = Repo.getDir(((MGitApplication) getApplicationContext()).getPrefenceHelper(), name);
+        if (target.exists()) {
+            return "A folder named \"" + name + "\" already exists.";
+        }
+
+        final String cloningStatus = getString(R.string.cloning);
+        Repo repo = Repo.createRepo(name, url, cloningStatus);
+        if (!request.getUsername().isEmpty()) {
+            repo.setUsername(request.getUsername());
+            repo.setPassword(request.getPassword());
+            repo.saveCredentials();
+        }
+        CloneTask task = new CloneTask(repo, request.getRecursive(), cloningStatus, null);
+        task.executeTask();
+        return null;
     }
 
     @Override
@@ -223,33 +220,6 @@ public class RepoListActivity extends SheimiFragmentActivity {
         }
     }
 
-    public class SearchListener implements SearchView.OnQueryTextListener,
-            MenuItemCompat.OnActionExpandListener {
-
-        @Override
-        public boolean onQueryTextSubmit(String s) {
-            return false;
-        }
-
-        @Override
-        public boolean onQueryTextChange(String s) {
-            mRepoListAdapter.searchRepo(s);
-            return false;
-        }
-
-        @Override
-        public boolean onMenuItemActionExpand(MenuItem menuItem) {
-            return true;
-        }
-
-        @Override
-        public boolean onMenuItemActionCollapse(MenuItem menuItem) {
-            mRepoListAdapter.queryAllRepo();
-            return true;
-        }
-
-    }
-
     public void finish() {
         rawfinish();
     }
@@ -257,21 +227,5 @@ public class RepoListActivity extends SheimiFragmentActivity {
     private void initUpdatedSSL() {
         MGitHttpConnectionFactory.install();
         Timber.i("Installed custom HTTPS factory");
-    }
-
-    private void cloneRepo() {
-        if (binding.getCloneViewModel().validate()) {
-            hideCloneView();
-            binding.getCloneViewModel().cloneRepo();
-        }
-    }
-
-    private void showCloneView() {
-        binding.getCloneViewModel().show(true);
-    }
-
-    private void hideCloneView() {
-        binding.getCloneViewModel().show(false);
-        ViewHelperKt.hideKeyboard(this);
     }
 }

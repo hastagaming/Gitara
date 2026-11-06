@@ -1,6 +1,6 @@
-# MGit
+# Gitara
 
-MGit is a Git client Android App.
+Gitara is a Git client Android App.
 
 This is a continuation of [the SGit project](https://github.com/sheimi/SGit).
 
@@ -13,20 +13,20 @@ This is a continuation of [the SGit project](https://github.com/sheimi/SGit).
 
 ## Notes
 
-[![Build Status](https://travis-ci.org/maks/MGit.svg?branch=master)](https://travis-ci.org/maks/MGit)
+[![Build Status](https://travis-ci.org/hastagaming/Gitara.svg?branch=master)](https://travis-ci.org/hastagaming/Gitara)
 
-[![Join the chat at https://gitter.im/MGit-Android/Lobby](https://badges.gitter.im/MGit-Android/Lobby.svg)](https://gitter.im/MGit-Android/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Join the chat at https://gitter.im/Gitara-Android/Lobby](https://badges.gitter.im/Gitara-Android/Lobby.svg)](https://gitter.im/Gitara-Android/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-[![Translate - with Stringlate](https://img.shields.io/badge/translate%20with-stringlate-green.svg)](https://lonamiwebs.github.io/stringlate/translate?git=https%3A%2F%2Fgithub.com%2Fmaks%2FMGit)
+[![Translate - with Stringlate](https://img.shields.io/badge/translate%20with-stringlate-green.svg)](https://lonamiwebs.github.io/stringlate/translate?git=https%3A%2F%2Fgithub.com%2Fhastagaming%2FGitara)
 
-* If you encounter any issues (bugs, crashes, etc.) and want to help improve this project, please open an issue on [GitHub](https://github.com/maks/MGit/issues/new) describing: what the issues are; and how they were caused, to allow for re-creation and fixing of bugs.
+* If you encounter any issues (bugs, crashes, etc.) and want to help improve this project, please open an issue on [GitHub](https://github.com/hastagaming/Gitara/issues/new) describing: what the issues are; and how they were caused, to allow for re-creation and fixing of bugs.
 * This app requires minimum of for Android v5.0
 
 ### Editing Files
 
-As of version 1.5.7, MGit no longer provides an internal texteditor, instead if you wish to edit files, you will need to have an editor app installed. 
+As of version 1.5.7, Gitara no longer provides an internal texteditor, instead if you wish to edit files, you will need to have an editor app installed. 
 
-An open source editor that has been tested to work with MGit is ["Viper Exit, nee Turbo Editor"](https://github.com/maks/viper-edit)
+An open source editor that has been tested to work with Gitara is ["Viper Exit, nee Turbo Editor"](https://github.com/hastagaming/viper-edit)
 
 but others that support File Providers should also work.
 
@@ -45,7 +45,7 @@ but others that support File Providers should also work.
 * Private key management
 * Manually choose code language
 * `git diff` between commits
-* Import existing repositories (that is, you can copy a repository from computer and import to MGit)
+* Import existing repositories (that is, you can copy a repository from computer and import to Gitara)
 * Checkout remote branches
 * Merge branches
 * Push merged content
@@ -68,10 +68,10 @@ but others that support File Providers should also work.
 
 1. Click on the `+` icon to add a new repository
 2. Enter remote URL (see URL format below)
-3. Enter local repository name - note that this is **not** the full path, as MGit stores all  
-repositories in the same local directory (can be changed in MGit settings)
+3. Enter local repository name - note that this is **not** the full path, as Gitara stores all  
+repositories in the same local directory (can be changed in Gitara settings)
 4. Click the `Clone` button
-5. If required, you will be prompted for credentials to connect to the remote repo. MGit will download the repository (all branches) to your device
+5. If required, you will be prompted for credentials to connect to the remote repo. Gitara will download the repository (all branches) to your device
 
 ### Create a local repository
 1. Click on the `+` icon to add a new repository
@@ -85,7 +85,7 @@ repositories in the same local directory (can be changed in MGit settings)
 
 * SSH running on standard port (22): `ssh://username@server_name/path/to/repo`
 * SSH running on non-standard port: `ssh://username@server_name:port/path/to/repo`
-* `username` is needed - by default, MGit tries to connect as root.
+* `username` is needed - by default, Gitara tries to connect as root.
 
 #### HTTP(S) URLs
 
@@ -93,13 +93,13 @@ repositories in the same local directory (can be changed in MGit settings)
 
 ## ToDo List
 
-[Future enhancements and bugs are tracked here on Github](https://github.com/maks/MGit/issues).
+[Future enhancements and bugs are tracked here on Github](https://github.com/hastagaming/Gitara/issues).
 
 ## License
 
 See [GPLv3](./LICENSE)
 
-All code written by `maks@manichord.com` can at your option also be used under the [MIT license](https://en.wikipedia.org/wiki/MIT_License).
+All code written by `hastagaming@manichord.com` can at your option also be used under the [MIT license](https://en.wikipedia.org/wiki/MIT_License).
 
 ## Help
 

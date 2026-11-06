@@ -1,27 +1,20 @@
 package me.sheimi.sgit.activities;
 
+import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Bundle;
-import androidx.fragment.app.FragmentManager;
-import androidx.fragment.app.FragmentPagerAdapter;
-import androidx.core.view.MenuItemCompat;
-import androidx.viewpager.widget.ViewPager;
-import androidx.drawerlayout.widget.DrawerLayout;
-import androidx.appcompat.app.ActionBar;
 import android.view.KeyEvent;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.animation.Animation;
-import android.view.animation.AnimationUtils;
-import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.ListView;
-import android.widget.ProgressBar;
-import android.widget.RelativeLayout;
-import android.widget.SearchView;
-import android.widget.TextView;
 
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
+
+import io.gitara.ui.repodetail.RepoDetailComposeEntry;
+import io.gitara.ui.repodetail.RepoDetailController;
+import io.gitara.ui.repodetail.RepoDetailHost;
 import me.sheimi.android.activities.SheimiFragmentActivity;
 import me.sheimi.sgit.R;
 import me.sheimi.sgit.activities.delegate.RepoOperationDelegate;
@@ -33,59 +26,47 @@ import me.sheimi.sgit.fragments.FilesFragment;
 import me.sheimi.sgit.fragments.StatusFragment;
 import me.sheimi.sgit.repo.tasks.SheimiAsyncTask.AsyncTaskCallback;
 
-public class RepoDetailActivity extends SheimiFragmentActivity {
-
-    private ActionBar mActionBar;
-
-    private FilesFragment mFilesFragment;
-    private CommitsFragment mCommitsFragment;
-    private StatusFragment mStatusFragment;
-
-    private RelativeLayout mRightDrawer;
-    private ListView mRepoOperationList;
-    private DrawerLayout mDrawerLayout;
-    private RepoOperationsAdapter mDrawerAdapter;
-    private TabItemPagerAdapter mTabItemPagerAdapter;
-    private ViewPager mViewPager;
-    private Button mCommitNameButton;
-    private ImageView mCommitType;
-    private MenuItem mSearchItem;
-
-    private Repo mRepo;
-
-    private View mPullProgressContainer;
-    private ProgressBar mPullProgressBar;
-    private TextView mPullMsg;
-    private TextView mPullLeftHint;
-    private TextView mPullRightHint;
-
-    private RepoOperationDelegate mRepoDelegate;
+public class RepoDetailActivity extends SheimiFragmentActivity implements RepoDetailHost {
 
     private static final int FILES_FRAGMENT_INDEX = 0;
     private static final int COMMITS_FRAGMENT_INDEX = 1;
     private static final int STATUS_FRAGMENT_INDEX = 2;
     private static final int BRANCH_CHOOSE_ACTIVITY = 0;
-    private int mSelectedTab;
+
+    private static final String STATE_TAB = "gitara_selected_tab";
+    private static final String TAG_FILES = "gitara_files";
+    private static final String TAG_COMMITS = "gitara_commits";
+    private static final String TAG_STATUS = "gitara_status";
+
+    private FilesFragment mFilesFragment;
+    private CommitsFragment mCommitsFragment;
+    private StatusFragment mStatusFragment;
+
+    private Repo mRepo;
+    private RepoOperationDelegate mRepoDelegate;
+
+    private final RepoDetailController mController = new RepoDetailController();
+    private boolean mFragmentsReady = false;
 
     @Override
-    protected void onActivityResult (int requestCode, int resultCode, Intent data) {
-	switch (requestCode) {
-	case BRANCH_CHOOSE_ACTIVITY:
-	    String branchName = mRepo.getBranchName();
-	    if (branchName == null) {
-		showToastMessage(R.string.error_something_wrong);
-		return;
-	    }
-	    reset(branchName);
-	    break;
-	}
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        switch (requestCode) {
+            case BRANCH_CHOOSE_ACTIVITY:
+                String branchName = mRepo.getBranchName();
+                if (branchName == null) {
+                    showToastMessage(R.string.error_something_wrong);
+                    return;
+                }
+                reset(branchName);
+                break;
+        }
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mRepo = (Repo) getIntent().getSerializableExtra(Repo.TAG);
-        // aweful hack! workaround for null repo when returning from BranchChooser, but going to
+        // awful hack! workaround for null repo when returning from BranchChooser, but going to
         // shortly refactor passing in serialised repo, so not worth doing more to fix for now
         if (mRepo == null) {
             finish();
@@ -93,28 +74,27 @@ public class RepoDetailActivity extends SheimiFragmentActivity {
         }
         repoInit();
         setTitle(mRepo.getDiaplayName());
-        setContentView(R.layout.activity_repo_detail);
-        setupActionBar();
-        createFragments();
-        setupViewPager();
-        setupPullProgressView();
-        setupDrawer();
-        mCommitNameButton = (Button) findViewById(R.id.commitName);
-        mCommitType = (ImageView) findViewById(R.id.commitType);
-        mCommitNameButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-		Intent intent = new Intent(RepoDetailActivity.this, BranchChooserActivity.class);
-		intent.putExtra(Repo.TAG, mRepo);
-		startActivityForResult(intent, BRANCH_CHOOSE_ACTIVITY);
-            }
-        });
-        String branchName = mRepo.getBranchName();
-        if (branchName == null) {
-            showToastMessage(R.string.error_something_wrong);
-            return;
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().hide();
         }
-        resetCommitButtonName(branchName);
+        if (savedInstanceState != null) {
+            mController.selectTab(savedInstanceState.getInt(STATE_TAB, FILES_FRAGMENT_INDEX));
+        }
+        setContentView(RepoDetailComposeEntry.create(this, mController, this, mRepo));
+        applySystemBarIcons();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt(STATE_TAB, mController.getSelectedTab());
+    }
+
+    private void applySystemBarIcons() {
+        WindowInsetsControllerCompat insets =
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        insets.setAppearanceLightStatusBars(true);
+        insets.setAppearanceLightNavigationBars(true);
     }
 
     public RepoOperationDelegate getRepoDelegate() {
@@ -124,77 +104,137 @@ public class RepoDetailActivity extends SheimiFragmentActivity {
         return mRepoDelegate;
     }
 
-    private void setupViewPager() {
-        mViewPager = (ViewPager) findViewById(R.id.pager);
-        mTabItemPagerAdapter = new TabItemPagerAdapter(getSupportFragmentManager());
-        mViewPager.setAdapter(mTabItemPagerAdapter);
-        mViewPager.setOnPageChangeListener(mTabItemPagerAdapter);
+    @Override
+    public void onNavigateUp() {
+        finish();
     }
 
-    private void setupDrawer() {
-        mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
-        mRightDrawer = (RelativeLayout) findViewById(R.id.right_drawer);
-        mRepoOperationList = (ListView) findViewById(R.id.repoOperationList);
-        mDrawerAdapter = new RepoOperationsAdapter(this);
-        mRepoOperationList.setAdapter(mDrawerAdapter);
-        mRepoOperationList.setOnItemClickListener(mDrawerAdapter);
+    @Override
+    public void onChooseBranch() {
+        Intent intent = new Intent(RepoDetailActivity.this, BranchChooserActivity.class);
+        intent.putExtra(Repo.TAG, mRepo);
+        startActivityForResult(intent, BRANCH_CHOOSE_ACTIVITY);
     }
 
-    private void setupPullProgressView() {
-        mPullProgressContainer = findViewById(R.id.pullProgressContainer);
-        mPullProgressContainer.setVisibility(View.GONE);
-        mPullProgressBar = (ProgressBar) mPullProgressContainer
-                .findViewById(R.id.pullProgress);
-        mPullMsg = (TextView) mPullProgressContainer.findViewById(R.id.pullMsg);
-        mPullLeftHint = (TextView) mPullProgressContainer
-                .findViewById(R.id.leftHint);
-        mPullRightHint = (TextView) mPullProgressContainer
-                .findViewById(R.id.rightHint);
-    }
-
-    private void setupActionBar() {
-        mActionBar = getSupportActionBar();
-        mActionBar.setDisplayShowTitleEnabled(true);
-        mActionBar.setDisplayHomeAsUpEnabled(true);
-    }
-
-    private void createFragments() {
-        mFilesFragment = FilesFragment.newInstance(mRepo);
-        mCommitsFragment = CommitsFragment.newInstance(mRepo, null);
-        mStatusFragment = StatusFragment.newInstance(mRepo);
-    }
-
-    private void resetCommitButtonName(String commitName) {
-        int commitType = Repo.getCommitType(commitName);
-        switch (commitType) {
-            case Repo.COMMIT_TYPE_REMOTE:
-                // change the display name to local branch
-                commitName = Repo.convertRemoteName(commitName);
-            case Repo.COMMIT_TYPE_HEAD:
-                mCommitType.setVisibility(View.VISIBLE);
-                mCommitType.setImageResource(R.drawable.ic_branch_w);
-                break;
-            case Repo.COMMIT_TYPE_TAG:
-                mCommitType.setVisibility(View.VISIBLE);
-                mCommitType.setImageResource(R.drawable.ic_tag_w);
-                break;
-            case Repo.COMMIT_TYPE_TEMP:
-                mCommitType.setVisibility(View.GONE);
-                break;
+    @Override
+    public void onFragmentContainerReady() {
+        if (mFragmentsReady || isFinishing() || isDestroyed()) {
+            return;
         }
-        String displayName = Repo.getCommitDisplayName(commitName);
-        mCommitNameButton.setText(displayName);
+        FragmentManager fm = getSupportFragmentManager();
+
+        FilesFragment files = (FilesFragment) fm.findFragmentByTag(TAG_FILES);
+        if (files == null) {
+            files = FilesFragment.newInstance(mRepo);
+        }
+        CommitsFragment commits = (CommitsFragment) fm.findFragmentByTag(TAG_COMMITS);
+        if (commits == null) {
+            commits = CommitsFragment.newInstance(mRepo, null);
+        }
+        StatusFragment status = (StatusFragment) fm.findFragmentByTag(TAG_STATUS);
+        if (status == null) {
+            status = StatusFragment.newInstance(mRepo);
+        }
+        mFilesFragment = files;
+        mCommitsFragment = commits;
+        mStatusFragment = status;
+
+        int selected = mController.getSelectedTab();
+        FragmentTransaction tx = fm.beginTransaction();
+        if (!files.isAdded()) {
+            tx.add(R.id.repo_fragment_container, files, TAG_FILES);
+        }
+        if (!commits.isAdded()) {
+            tx.add(R.id.repo_fragment_container, commits, TAG_COMMITS);
+        }
+        if (!status.isAdded()) {
+            tx.add(R.id.repo_fragment_container, status, TAG_STATUS);
+        }
+        BaseFragment[] all = {files, commits, status};
+        for (int i = 0; i < all.length; i++) {
+            if (i == selected) {
+                tx.show(all[i]);
+            } else {
+                tx.hide(all[i]);
+            }
+        }
+        tx.commitNowAllowingStateLoss();
+        mFragmentsReady = true;
+        if (selected == STATUS_FRAGMENT_INDEX) {
+            mStatusFragment.reset();
+        }
+    }
+
+    @Override
+    public void onTabSelected(int index) {
+        if (!mFragmentsReady) {
+            return;
+        }
+        applyTabVisibility(index);
+    }
+
+    private void applyTabVisibility(int index) {
+        if (!mFragmentsReady) {
+            return;
+        }
+        FragmentTransaction tx = getSupportFragmentManager().beginTransaction();
+        BaseFragment[] all = {mFilesFragment, mCommitsFragment, mStatusFragment};
+        for (int i = 0; i < all.length; i++) {
+            if (i == index) {
+                tx.show(all[i]);
+            } else {
+                tx.hide(all[i]);
+            }
+        }
+        tx.commitAllowingStateLoss();
+        if (index == STATUS_FRAGMENT_INDEX) {
+            mStatusFragment.reset();
+        }
+    }
+
+    @Override
+    public void onCommitSearch(String query) {
+        if (mCommitsFragment == null || !mCommitsFragment.isAdded() || mCommitsFragment.getView() == null) {
+            return;
+        }
+        mCommitsFragment.setFilter(query);
+    }
+
+    @Override
+    public ListView createOperationsList(Context context) {
+        ListView list = new ListView(context);
+        RepoOperationsAdapter adapter = new RepoOperationsAdapter(this);
+        list.setAdapter(adapter);
+        list.setOnItemClickListener(adapter);
+        return list;
+    }
+
+    private BaseFragment fragmentAt(int index) {
+        switch (index) {
+            case COMMITS_FRAGMENT_INDEX:
+                return mCommitsFragment;
+            case STATUS_FRAGMENT_INDEX:
+                return mStatusFragment;
+            default:
+                return mFilesFragment;
+        }
     }
 
     public void reset(String commitName) {
-        resetCommitButtonName(commitName);
         reset();
     }
 
     public void reset() {
-        mFilesFragment.reset();
-        mCommitsFragment.reset();
-        mStatusFragment.reset();
+        if (mFilesFragment != null) {
+            mFilesFragment.reset();
+        }
+        if (mCommitsFragment != null) {
+            mCommitsFragment.reset();
+        }
+        if (mStatusFragment != null) {
+            mStatusFragment.reset();
+        }
+        mController.refresh();
     }
 
     public void setFilesFragment(FilesFragment filesFragment) {
@@ -213,46 +253,48 @@ public class RepoDetailActivity extends SheimiFragmentActivity {
         mStatusFragment = statusFragment;
     }
 
-
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.repo_detail, menu);
-        mSearchItem = menu.findItem(R.id.action_search);
-        MenuItemCompat.setOnActionExpandListener(mSearchItem, mTabItemPagerAdapter);
-        mSearchItem.setVisible(mSelectedTab == COMMITS_FRAGMENT_INDEX);
-        SearchView searchView = (SearchView) mSearchItem.getActionView();
-        if (searchView != null) {
-            searchView.setIconifiedByDefault(true);
-            searchView.setOnQueryTextListener(mTabItemPagerAdapter);
-        }
-        return true;
-    }
-
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_BACK:
             case KeyEvent.KEYCODE_DEL:
-                int position = mViewPager.getCurrentItem();
-                OnBackClickListener onBackClickListener = mTabItemPagerAdapter
-                        .getItem(position).getOnBackClickListener();
-                if (onBackClickListener != null) {
-                    if (onBackClickListener.onClick())
+                if (keyCode == KeyEvent.KEYCODE_DEL && mController.getSearching()) {
+                    return super.onKeyUp(keyCode, event);
+                }
+                if (mController.consumeBack()) {
+                    return true;
+                }
+                BaseFragment current = fragmentAt(mController.getSelectedTab());
+                if (current != null) {
+                    OnBackClickListener onBackClickListener = current.getOnBackClickListener();
+                    if (onBackClickListener != null && onBackClickListener.onClick()) {
                         return true;
+                    }
                 }
                 finish();
                 return true;
             case KeyEvent.KEYCODE_F:
-                mViewPager.setCurrentItem(FILES_FRAGMENT_INDEX);
+                if (mController.getSearching()) {
+                    return super.onKeyUp(keyCode, event);
+                }
+                mController.selectTab(FILES_FRAGMENT_INDEX);
                 return true;
             case KeyEvent.KEYCODE_C:
-                mViewPager.setCurrentItem(COMMITS_FRAGMENT_INDEX);
+                if (mController.getSearching()) {
+                    return super.onKeyUp(keyCode, event);
+                }
+                mController.selectTab(COMMITS_FRAGMENT_INDEX);
                 return true;
             case KeyEvent.KEYCODE_S:
-                mViewPager.setCurrentItem(STATUS_FRAGMENT_INDEX);
+                if (mController.getSearching()) {
+                    return super.onKeyUp(keyCode, event);
+                }
+                mController.selectTab(STATUS_FRAGMENT_INDEX);
                 return true;
             case KeyEvent.KEYCODE_SLASH:
+                if (mController.getSearching()) {
+                    return super.onKeyUp(keyCode, event);
+                }
                 if (event.isShiftPressed()) {
                     showKeyboardShortcutsHelpOverlay();
                 }
@@ -281,29 +323,26 @@ public class RepoDetailActivity extends SheimiFragmentActivity {
 
         @Override
         public void onPreExecute() {
-            mPullMsg.setText(mInitMsg);
-            Animation anim = AnimationUtils.loadAnimation(
-                    RepoDetailActivity.this, R.anim.fade_in);
-            mPullProgressContainer.setAnimation(anim);
-            mPullProgressContainer.setVisibility(View.VISIBLE);
-            mPullLeftHint.setText(R.string.progress_left_init);
-            mPullRightHint.setText(R.string.progress_right_init);
+            mController.showProgress(
+                    getString(mInitMsg),
+                    getString(R.string.progress_left_init),
+                    getString(R.string.progress_right_init));
         }
 
         @Override
         public void onProgressUpdate(String... progress) {
-            mPullMsg.setText(progress[0]);
-            mPullLeftHint.setText(progress[1]);
-            mPullRightHint.setText(progress[2]);
-            mPullProgressBar.setProgress(Integer.parseInt(progress[3]));
+            int value;
+            try {
+                value = Integer.parseInt(progress[3]);
+            } catch (NumberFormatException e) {
+                value = 0;
+            }
+            mController.updateProgress(progress[0], progress[1], progress[2], value);
         }
 
         @Override
         public void onPostExecute(Boolean isSuccess) {
-            Animation anim = AnimationUtils.loadAnimation(
-                    RepoDetailActivity.this, R.anim.fade_out);
-            mPullProgressContainer.setAnimation(anim);
-            mPullProgressContainer.setVisibility(View.GONE);
+            mController.hideProgress();
             reset();
         }
 
@@ -319,123 +358,21 @@ public class RepoDetailActivity extends SheimiFragmentActivity {
 
     }
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case android.R.id.home:
-                finish();
-                return true;
-            case R.id.action_toggle_drawer:
-                if (mDrawerLayout.isDrawerOpen(mRightDrawer)) {
-                    mDrawerLayout.closeDrawer(mRightDrawer);
-                } else {
-                    mDrawerLayout.openDrawer(mRightDrawer);
-                }
-                return true;
-        }
-        return super.onOptionsItemSelected(item);
-    }
-
     public void closeOperationDrawer() {
-        mDrawerLayout.closeDrawer(mRightDrawer);
+        mController.closeOperations();
     }
 
     public void enterDiffActionMode() {
-        mViewPager.setCurrentItem(COMMITS_FRAGMENT_INDEX);
-        mCommitsFragment.enterDiffActionMode();
+        mController.selectTab(COMMITS_FRAGMENT_INDEX);
+        applyTabVisibility(COMMITS_FRAGMENT_INDEX);
+        if (mCommitsFragment != null) {
+            mCommitsFragment.enterDiffActionMode();
+        }
     }
 
     private void repoInit() {
         mRepo.updateLatestCommitInfo();
         mRepo.getRemotes();
-    }
-
-    class TabItemPagerAdapter extends FragmentPagerAdapter implements ViewPager.OnPageChangeListener, SearchView.OnQueryTextListener, MenuItemCompat.OnActionExpandListener {
-
-        private final int[] PAGE_TITLE = { R.string.tab_files_label,
-                R.string.tab_commits_label, R.string.tab_status_label };
-
-        public TabItemPagerAdapter(FragmentManager fm) {
-            super(fm);
-        }
-
-        @Override
-        public BaseFragment getItem(int position) {
-            switch (position) {
-                case FILES_FRAGMENT_INDEX:
-                    return mFilesFragment;
-                case COMMITS_FRAGMENT_INDEX:
-                    return mCommitsFragment;
-                case STATUS_FRAGMENT_INDEX:
-                    mStatusFragment.reset();
-                    return mStatusFragment;
-            }
-            return mFilesFragment;
-        }
-
-        @Override
-        public CharSequence getPageTitle(int position) {
-            return getString(PAGE_TITLE[position]);
-        }
-
-        @Override
-        public int getCount() {
-            return PAGE_TITLE.length;
-        }
-
-        @Override
-        public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
-
-        }
-
-        @Override
-        public void onPageSelected(int position) {
-            mSelectedTab = position;
-            if (mSearchItem != null) {
-                mSearchItem.setVisible(position == COMMITS_FRAGMENT_INDEX);
-            }
-        }
-
-        @Override
-        public void onPageScrollStateChanged(int state) {
-
-        }
-
-        @Override
-        public boolean onQueryTextSubmit(String query) {
-            switch (mViewPager.getCurrentItem()) {
-                case COMMITS_FRAGMENT_INDEX:
-                    mCommitsFragment.setFilter(query);
-                    break;
-            }
-            return true;
-        }
-
-        @Override
-        public boolean onQueryTextChange(String query) {
-            switch (mViewPager.getCurrentItem()) {
-                case COMMITS_FRAGMENT_INDEX:
-                    mCommitsFragment.setFilter(query);
-                    break;
-            }
-            return true;
-        }
-
-        @Override
-        public boolean onMenuItemActionExpand(MenuItem menuItem) {
-            return true;
-        }
-
-        @Override
-        public boolean onMenuItemActionCollapse(MenuItem menuItem) {
-            switch (mViewPager.getCurrentItem()) {
-                case COMMITS_FRAGMENT_INDEX:
-                    mCommitsFragment.setFilter(null);
-                    break;
-            }
-            return true;
-        }
-
     }
 
 }

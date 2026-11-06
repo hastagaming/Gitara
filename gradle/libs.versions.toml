@@ -25,6 +25,7 @@ stetho = "1.5.0"
 junit = "4.12"
 robolectric = "3.5"
 robolectricShadows = "3.4-rc2"
+coroutines = "1.10.2"
 
 [libraries]
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
@@ -58,6 +59,8 @@ stetho-timber = { module = "com.facebook.stetho:stetho-timber", version.ref = "s
 junit = { module = "junit:junit", version.ref = "junit" }
 robolectric-core = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 robolectric-shadows-support = { module = "org.robolectric:shadows-support-v4", version.ref = "robolectricShadows" }
+androidx-compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
