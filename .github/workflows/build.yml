@@ -34,9 +34,6 @@ jobs:
 
         echo "android.aapt2FromMavenOverride=$HOME/aapt2/aapt2" >> "$GITHUB_WORKSPACE/gradle.properties"
 
-    - name: Verify AAPT2
-      run: "$HOME/aapt2/aapt2" version
-
     - name: Build with Gradle
       run: ./gradlew --no-daemon clean assembleDebug testDebug
 
