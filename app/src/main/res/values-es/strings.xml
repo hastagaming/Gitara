@@ -171,18 +171,18 @@
     <string name="action_add_private_key">Add Private Key</string>
 
     <!-- Crash reporting via ACRA -->
-    <string name="crash_toast_text">MGit error - gathering data to email a crash report</string>
+    <string name="crash_toast_text">Gitara error - gathering data to email a crash report</string>
 
     <!-- Intent filters -->
     <string name="cloning">Cloning … </string>
     <string name="importing">Importing … </string>
     <string name="initialising">Initialising … </string>
-    <string name="clone_with_mgit">Clone with MGit</string>
+    <string name="clone_with_mgit">Clone with Gitara</string>
     <string name="invalid_url">URL inválido!</string>
     <string name="repository_already_present">Repository already present!</string>
     <string name="dialog_error_send_report">Send error report</string>
     <string name="dialog_error_occurred_msg">An unexpected error occurred</string>
-    <string name="dialog_permission_not_granted">MGit requires that you grant it write access to be able to write local git repos to your storage, until you do this MGit will NOT work properly.</string>
+    <string name="dialog_permission_not_granted">Gitara requires that you grant it write access to be able to write local git repos to your storage, until you do this Gitara will NOT work properly.</string>
     <string name="preference_eng_lang">Idioma en Inglés</string>
     <string name="preference_eng_lang_summary">Utilice el inglés en lugar del idioma predeterminado</string>
     <string name="error_no_worktree">This is a bare repository!</string>

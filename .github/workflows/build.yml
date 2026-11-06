@@ -22,5 +22,5 @@ jobs:
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: mgit-debug-apk
+        name: gitara-debug
         path: app/build/outputs/apk/debug/*.apk

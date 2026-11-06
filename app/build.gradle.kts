@@ -1,7 +1,16 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.kapt")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.kotlin.compose)
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_1_8)
+    }
 }
 
 android {
@@ -13,28 +22,31 @@ android {
         targetCompatibility = JavaVersion.VERSION_1_8
     }
 
-    kotlinOptions {
-        jvmTarget = "1.8"
-    }
-
     defaultConfig {
-        applicationId = "com.manichord.mgit"
+        applicationId = "io.gitara"
         minSdk = 21
         targetSdk = 36
 
         vectorDrawables.useSupportLibrary = true
 
-        versionCode = 240
-        versionName = "1.7.0"
+        versionCode = 1
+        versionName = "1.0.0"
     }
 
     buildFeatures {
         dataBinding = true
         buildConfig = true
+        compose = true
     }
 
     lint {
         abortOnError = false
+    }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
     }
 
     signingConfigs {
@@ -54,6 +66,9 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".debug"
+        }
         getByName("release") {
             signingConfig = signingConfigs.getByName("release")
         }
@@ -70,38 +85,38 @@ configurations.all {
 }
 
 dependencies {
-    val acraVersion = "5.8.4"
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.fragment)
+    implementation(libs.androidx.annotation)
+    implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.vectordrawable)
+    implementation(libs.androidx.constraintlayout)
+    implementation(libs.google.material)
 
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-    implementation("androidx.fragment:fragment:1.4.0")
-    implementation("androidx.annotation:annotation:1.3.0")
-    implementation("androidx.appcompat:appcompat:1.4.0")
-    implementation("com.google.android.material:material:1.4.0")
-    implementation("androidx.recyclerview:recyclerview:1.2.1")
-    implementation("androidx.vectordrawable:vectordrawable:1.1.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.2")
+    implementation(libs.androidx.lifecycle.extensions)
+    kapt(libs.androidx.lifecycle.compiler)
 
-    // ViewModel and LiveData
-    implementation("androidx.lifecycle:lifecycle-extensions:2.2.0")
-    kapt("androidx.lifecycle:lifecycle-compiler:2.4.0")
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.activity.compose)
 
-    implementation("com.jakewharton.timber:timber:4.5.1")
-    implementation("com.github.mwiede:jsch:0.2.0")
-    implementation("commons-io:commons-io:2.5")
-    implementation("org.eclipse.jgit:org.eclipse.jgit:3.7.1.201504261725-r")
-    implementation("com.nostra13.universalimageloader:universal-image-loader:1.9.5")
-    implementation("com.scottyab:secure-preferences-lib:0.1.7")
-    // 2.6.0+ ships 16 KB page-aligned native libs (built with NDK r27, minSdk 21).
-    // Older versions (<= 2.5.x) have 4 KB LOAD alignment and fail Play's 16 KB check.
-    implementation("org.conscrypt:conscrypt-android:2.7.0")
-    implementation("org.bouncycastle:bcprov-jdk15on:1.70")
+    implementation(libs.timber)
+    implementation(libs.jsch)
+    implementation(libs.commons.io)
+    implementation(libs.jgit)
+    implementation(libs.universal.image.loader)
+    implementation(libs.secure.preferences)
+    implementation(libs.conscrypt)
+    implementation(libs.bouncycastle)
 
-    implementation("ch.acra:acra-mail:$acraVersion")
-    implementation("ch.acra:acra-dialog:$acraVersion")
+    implementation(libs.acra.mail)
+    implementation(libs.acra.dialog)
 
-    debugImplementation("com.facebook.stetho:stetho:1.5.0")
-    debugImplementation("com.facebook.stetho:stetho-timber:1.5.0")
-    testImplementation("junit:junit:4.12")
-    testImplementation("org.robolectric:robolectric:3.5")
-    testImplementation("org.robolectric:shadows-support-v4:3.4-rc2")
+    debugImplementation(libs.stetho.core)
+    debugImplementation(libs.stetho.timber)
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric.core)
+    testImplementation(libs.robolectric.shadows.support)
 }

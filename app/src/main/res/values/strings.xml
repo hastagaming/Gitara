@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_name" translatable="false">MGit</string>
+    <string name="app_name" translatable="false">Gitara</string>
     <string name="default_text">Default Text</string>
     <string name="title_clone_repo">Clone Repository</string>
     <string name="preference_file_key" translatable="false">com.manichord.mgit</string>
@@ -132,7 +132,7 @@
     <string name="dialog_open_remote">Open remote url</string>
     <string name="dialog_open_remote_title">Choose app to open %s remote</string>
     <string name="dialog_open_remote_no_app_available">No Apps available to open the url</string>
-    <string name="dialog_permission_not_granted">MGit requires that you grant it write access to be able to write local git repos to your storage, until you do this MGit will NOT work properly.</string>
+    <string name="dialog_permission_not_granted">Gitara requires that you grant it write access to be able to write local git repos to your storage, until you do this Gitara will NOT work properly.</string>
 
     <!-- Others -->
     <string name="pull_msg_init">Pulling … </string>
@@ -145,7 +145,7 @@
     <string name="title_activity_explore_file">Explore Files</string>
     <string name="title_activity_settings">Settings</string>
     <string name="title_config_repo">Repository config</string>
-    <string name="feedback_url" translatable="false">https://github.com/maks/MGit/issues/new</string>
+    <string name="feedback_url" translatable="false">https://github.com/maks/Gitara/issues/new</string>
 
     <!-- toast msg -->
     <string name="feedback_subject">Feedback</string>
@@ -182,13 +182,13 @@
     <string name="action_add_private_key">Add Private Key</string>
 
     <!-- Crash reporting via ACRA -->
-    <string name="crash_toast_text">MGit error - gathering data to email a crash report</string>
+    <string name="crash_toast_text">Gitara error - gathering data to email a crash report</string>
     <string name="crash_report_email" translatable="false">mgit@manichord.com</string>
 
     <!-- Intent filters -->
     <string name="cloning">Cloning … </string>
     <string name="importing">Importing … </string>
-    <string name="clone_with_mgit">Clone with MGit</string>
+    <string name="clone_with_mgit">Clone with Gitara</string>
     <string name="invalid_url">Invalid URL!</string>
     <string name="https" translatable="false">https</string>
     <string name="http" translatable="false">http</string>
@@ -208,6 +208,6 @@
     <string name="preference_eng_lang">English Language</string>
     <string name="preference_eng_lang_summary">Use English instead of the default language</string>
     <string name="pref_key_use_english" translatable="false">use.english</string>
-    <string name="dialog_access_all_files_title">Access MGit to access all files</string>
-    <string name="dialog_access_all_files_msg">To function correctly and be able to do things like finding modified files in your git working directory MGit needs permission to access all files.\n\nGrant permission?</string>
+    <string name="dialog_access_all_files_title">Access Gitara to access all files</string>
+    <string name="dialog_access_all_files_msg">To function correctly and be able to do things like finding modified files in your git working directory Gitara needs permission to access all files.\n\nGrant permission?</string>
 </resources>

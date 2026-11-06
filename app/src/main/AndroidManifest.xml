@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="me.sheimi.sgit"
-    android:versionCode="1"
-    android:versionName="1" >
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
@@ -10,19 +7,19 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
     <application
-        android:name=".MGitApplication"
+        android:name="me.sheimi.sgit.MGitApplication"
         android:allowBackup="true"
-        android:largeHeap="true" 
+        android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:logo="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/AppTheme"
+        android:enableOnBackInvokedCallback="false"
         android:requestLegacyExternalStorage="true">
         <activity
             android:name="com.manichord.mgit.repolist.RepoListActivity"
             android:label="@string/app_name"
-            android:exported="true"
-            >
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -47,83 +44,87 @@
                 <data android:host="@string/gitlab.com" />
                 <data android:host="@string/bitbucket.com" />
                 <data android:host="@string/notabug.org" />
+                <data android:host="bitbucket.org" />
+                <data android:host="codeberg.org" />
+                <data android:host="gitea.com" />
+                <data android:host="git.sr.ht" />
             </intent-filter>
         </activity>
         <activity
-            android:name=".activities.RepoDetailActivity"
+            android:name="me.sheimi.sgit.activities.RepoDetailActivity"
             android:label="@string/title_activity_repo_detail"
-            android:parentActivityName="com.manichord.mgit.repolist.RepoListActivity" >
+            android:parentActivityName="com.manichord.mgit.repolist.RepoListActivity">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="com.manichord.mgit.repolist.RepoListActivity" />
         </activity>
         <activity
-            android:name=".activities.ViewFileActivity"
+            android:name="me.sheimi.sgit.activities.ViewFileActivity"
             android:configChanges="orientation|keyboardHidden"
-            android:parentActivityName=".activities.RepoDetailActivity" >
+            android:parentActivityName="me.sheimi.sgit.activities.RepoDetailActivity">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activities.RepoDetailActivity" />
-        </activity>
-	<activity
-            android:name=".activities.BranchChooserActivity"
-            android:configChanges="orientation|keyboardHidden"
-            android:parentActivityName=".activities.RepoDetailActivity" >
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activities.RepoDetailActivity" />
+                android:value="me.sheimi.sgit.activities.RepoDetailActivity" />
         </activity>
         <activity
-            android:name=".activities.CommitDiffActivity"
-            android:parentActivityName=".activities.RepoDetailActivity" >
+            android:name="me.sheimi.sgit.activities.BranchChooserActivity"
+            android:configChanges="orientation|keyboardHidden"
+            android:parentActivityName="me.sheimi.sgit.activities.RepoDetailActivity">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activities.RepoDetailActivity" />
+                android:value="me.sheimi.sgit.activities.RepoDetailActivity" />
         </activity>
         <activity
-            android:name=".activities.explorer.ImportRepositoryActivity"
+            android:name="me.sheimi.sgit.activities.CommitDiffActivity"
+            android:parentActivityName="me.sheimi.sgit.activities.RepoDetailActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value="me.sheimi.sgit.activities.RepoDetailActivity" />
+        </activity>
+        <activity
+            android:name="me.sheimi.sgit.activities.explorer.ImportRepositoryActivity"
             android:label="@string/title_activity_import_repository"
-            android:parentActivityName="com.manichord.mgit.repolist.RepoListActivity" >
+            android:parentActivityName="com.manichord.mgit.repolist.RepoListActivity">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="com.manichord.mgit.repolist.RepoListActivity" />
         </activity>
         <activity
-            android:name=".activities.explorer.PrivateKeyManageActivity"
+            android:name="me.sheimi.sgit.activities.explorer.PrivateKeyManageActivity"
             android:label="@string/title_activity_private_key_manage"
-            android:parentActivityName="com.manichord.mgit.repolist.RepoListActivity" >
+            android:parentActivityName="com.manichord.mgit.repolist.RepoListActivity">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="com.manichord.mgit.repolist.RepoListActivity" />
         </activity>
         <activity
-            android:name=".activities.explorer.ExploreFileActivity"
+            android:name="me.sheimi.sgit.activities.explorer.ExploreFileActivity"
             android:label="@string/title_activity_explore_file"
-            android:parentActivityName=".activities.explorer.PrivateKeyManageActivity" >
+            android:parentActivityName="me.sheimi.sgit.activities.explorer.PrivateKeyManageActivity">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activities.explorer.PrivateKeyManageActivity" />
+                android:value="me.sheimi.sgit.activities.explorer.PrivateKeyManageActivity" />
         </activity>
         <activity
-            android:name=".activities.UserSettingsActivity"
+            android:name="me.sheimi.sgit.activities.UserSettingsActivity"
             android:label="@string/title_activity_settings"
-            android:parentActivityName="com.manichord.mgit.repolist.RepoListActivity" >
+            android:parentActivityName="com.manichord.mgit.repolist.RepoListActivity">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="com.manichord.mgit.repolist.RepoListActivity" />
         </activity>
         <activity
-            android:name=".activities.explorer.ExploreRootDirActivity"
+            android:name="me.sheimi.sgit.activities.explorer.ExploreRootDirActivity"
             android:label="@string/title_activity_explore_file"
-            android:parentActivityName=".activities.UserSettingsActivity" >
+            android:parentActivityName="me.sheimi.sgit.activities.UserSettingsActivity">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activities.UserSettingsActivity" />
+                android:value="me.sheimi.sgit.activities.UserSettingsActivity" />
         </activity>
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.manichord.mgit.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

@@ -25,7 +25,7 @@ public class FsUtils {
     public static final SimpleDateFormat TIMESTAMP_FORMATTER = new SimpleDateFormat(
             "yyyyMMdd_HHmmss", Locale.getDefault());
 
-    public static final String PROVIDER_AUTHORITY = "com.manichord.mgit.fileprovider";
+    public static final String PROVIDER_AUTHORITY = me.sheimi.sgit.BuildConfig.APPLICATION_ID + ".fileprovider";
     public static final String TEMP_DIR = "temp";
 
     private FsUtils() {
