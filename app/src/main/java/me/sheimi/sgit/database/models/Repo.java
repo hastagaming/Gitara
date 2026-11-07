@@ -497,20 +497,19 @@ public class Repo implements Comparable<Repo>, Serializable {
         }
     }
 
+    public static File getInternalRoot() {
+        File root = new File(MGitApplication.getContext().getFilesDir(), "home/repos");
+        if (!root.isDirectory()) {
+            root.mkdirs();
+        }
+        return root;
+    }
+
     public static File getDir(PreferenceHelper preferenceHelper, String localpath) {
         if (Repo.isExternal(localpath)) {
             return new File(localpath.substring(Repo.EXTERNAL_PREFIX.length()));
         }
-        File repoDir = preferenceHelper.getRepoRoot();
-        if (repoDir == null) {
-            repoDir = FsUtils.getExternalDir(REPO_DIR, true);
-            Timber.d("PRESET repo path:"+new File(repoDir, localpath).getAbsolutePath());
-            return new File(repoDir, localpath);
-        } else {
-            repoDir = new File(preferenceHelper.getRepoRoot(), localpath);
-            Timber.d("CUSTOM repo path:"+repoDir);
-            return repoDir;
-        }
+        return new File(getInternalRoot(), localpath);
     }
 
     public static void setLocalRepoRoot(Context context, File repoRoot) {

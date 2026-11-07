@@ -1,3 +1,4 @@
+import java.security.MessageDigest
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -13,6 +14,54 @@ kotlin {
     }
 }
 
+val prootCommit = "01f83b8841358450c78333d1b33ab30d4943bec4"
+val prootSha256 = "9629eb30cdf86e95c6ba681f8ab89c6fdaa9eca093d5577163513c99af5ca281"
+val prootArchive = layout.buildDirectory.file("proot/proot-android-aarch64.tar.gz")
+val prootLibsDir = layout.buildDirectory.dir("generated/prootLibs")
+
+fun sha256Of(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            digest.update(buffer, 0, read)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+val downloadProot by tasks.registering {
+    outputs.file(prootArchive)
+    doLast {
+        val file = prootArchive.get().asFile
+        file.parentFile.mkdirs()
+        if (!file.isFile || sha256Of(file) != prootSha256) {
+            val url = "https://raw.githubusercontent.com/green-green-avk/build-proot-android/$prootCommit/packages/proot-android-aarch64.tar.gz"
+            uri(url).toURL().openStream().use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            }
+            val actual = sha256Of(file)
+            check(actual == prootSha256) { "proot archive checksum mismatch: $actual" }
+        }
+    }
+}
+
+val prepareProotLibs by tasks.registering(Sync::class) {
+    dependsOn(downloadProot)
+    into(prootLibsDir.map { it.dir("arm64-v8a") })
+    from(tarTree(resources.gzip(prootArchive))) {
+        include("root/bin/proot")
+        eachFile { relativePath = RelativePath(true, "libproot.so") }
+    }
+    from(tarTree(resources.gzip(prootArchive))) {
+        include("root/libexec/proot/loader")
+        eachFile { relativePath = RelativePath(true, "libproot_loader.so") }
+    }
+    includeEmptyDirs = false
+}
+
 android {
     namespace = "me.sheimi.sgit"
     compileSdk = 36
@@ -24,13 +73,17 @@ android {
 
     defaultConfig {
         applicationId = "io.gitara"
-        minSdk = 21
+        minSdk = 26
         targetSdk = 36
 
         vectorDrawables.useSupportLibrary = true
 
         versionCode = 1
         versionName = "1.0.0"
+
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     buildFeatures {
@@ -43,7 +96,16 @@ android {
         abortOnError = false
     }
 
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDir(prootLibsDir)
+        }
+    }
+
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
@@ -75,6 +137,10 @@ android {
     }
 }
 
+tasks.named("preBuild") {
+    dependsOn(prepareProotLibs)
+}
+
 configurations.all {
     resolutionStrategy.eachDependency {
         if (requested.group == "com.jcraft" && requested.name == "jsch") {
@@ -100,7 +166,11 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.kotlinx.coroutines.android)
+
+    implementation(libs.snakeyaml.engine)
 
     implementation(libs.timber)
     implementation(libs.jsch)
@@ -110,9 +180,6 @@ dependencies {
     implementation(libs.secure.preferences)
     implementation(libs.conscrypt)
     implementation(libs.bouncycastle)
-
-    implementation(libs.androidx.compose.material.icons.core)
-    implementation(libs.kotlinx.coroutines.android)
 
     implementation(libs.acra.mail)
     implementation(libs.acra.dialog)
