@@ -177,17 +177,17 @@ public class CommitDiffActivity extends SheimiFragmentActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case android.R.id.home:
-                finish();
-                return true;
-            case R.id.action_save_diff:
-                Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT)
-                        .setType("text/x-patch")
-                        .putExtra(Intent.EXTRA_TITLE, Repo.getCommitDisplayName(mNewCommit) + ".diff");
+        int id = item.getItemId();
+        if (id == android.R.id.home) {
+            finish();
+            return true;
+        } else if (id == R.id.action_save_diff) {
+            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT)
+                    .setType("text/x-patch")
+                    .putExtra(Intent.EXTRA_TITLE, Repo.getCommitDisplayName(mNewCommit) + ".diff");
 
-                startActivityForResult(intent, REQUEST_SAVE_DIFF);
-                return true;
+            startActivityForResult(intent, REQUEST_SAVE_DIFF);
+            return true;
         }
         return super.onOptionsItemSelected(item);
     }

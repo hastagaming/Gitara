@@ -3,8 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.legacy.kapt)
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -17,7 +16,6 @@ kotlin {
 val prootCommit = "01f83b8841358450c78333d1b33ab30d4943bec4"
 val prootSha256 = "9629eb30cdf86e95c6ba681f8ab89c6fdaa9eca093d5577163513c99af5ca281"
 val prootArchive = layout.buildDirectory.file("proot/proot-android-aarch64.tar.gz")
-val prootLibsDir = layout.buildDirectory.dir("generated/prootLibs")
 
 fun sha256Of(file: File): String {
     val digest = MessageDigest.getInstance("SHA-256")
@@ -48,18 +46,27 @@ val downloadProot by tasks.registering {
     }
 }
 
-val prepareProotLibs by tasks.registering(Sync::class) {
-    dependsOn(downloadProot)
-    into(prootLibsDir.map { it.dir("arm64-v8a") })
-    from(tarTree(resources.gzip(prootArchive))) {
-        include("root/bin/proot")
-        eachFile { relativePath = RelativePath(true, "libproot.so") }
+abstract class ProotLibsTask : Sync() {
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+}
+
+androidComponents.onVariants { variant ->
+    val taskName = "prepareProotLibs" + variant.name.replaceFirstChar { it.uppercase() }
+    val prepare = tasks.register<ProotLibsTask>(taskName) {
+        dependsOn(downloadProot)
+        into(outputDir.dir("arm64-v8a"))
+        from(tarTree(resources.gzip(prootArchive))) {
+            include("root/bin/proot")
+            eachFile { relativePath = RelativePath(true, "libproot.so") }
+        }
+        from(tarTree(resources.gzip(prootArchive))) {
+            include("root/libexec/proot/loader")
+            eachFile { relativePath = RelativePath(true, "libproot_loader.so") }
+        }
+        includeEmptyDirs = false
     }
-    from(tarTree(resources.gzip(prootArchive))) {
-        include("root/libexec/proot/loader")
-        eachFile { relativePath = RelativePath(true, "libproot_loader.so") }
-    }
-    includeEmptyDirs = false
+    variant.sources.jniLibs?.addGeneratedSourceDirectory(prepare, ProotLibsTask::outputDir)
 }
 
 android {
@@ -96,12 +103,6 @@ android {
         abortOnError = false
     }
 
-    sourceSets {
-        getByName("main") {
-            jniLibs.srcDir(prootLibsDir)
-        }
-    }
-
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -135,10 +136,6 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
-}
-
-tasks.named("preBuild") {
-    dependsOn(prepareProotLibs)
 }
 
 configurations.all {

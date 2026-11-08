@@ -1,135 +1,197 @@
+<div align="center">
+
 # Gitara
 
-Gitara is a Git client Android App.
+**A Git client for Android with a hosting-style UI, a private Linux box, and GitHub-Actions-like workflows. All on your phone.**
 
-This is a continuation of [the SGit project](https://github.com/sheimi/SGit).
 
-[<img src="https://play.google.com/intl/en_us/badges/images/generic/en_badge_web_generic.png"
-      alt="Get it on Google Play"
-      height="80">](https://play.google.com/store/apps/details?id=com.manichord.mgit)
-[<img src="https://f-droid.org/badge/get-it-on.png"
-      alt="Get it on F-Droid"
-      height="80">](https://f-droid.org/packages/com.manichord.mgit)
 
-## Notes
+![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
-[![Build Status](https://travis-ci.org/hastagaming/Gitara.svg?branch=master)](https://travis-ci.org/hastagaming/Gitara)
 
-[![Join the chat at https://gitter.im/Gitara-Android/Lobby](https://badges.gitter.im/Gitara-Android/Lobby.svg)](https://gitter.im/Gitara-Android/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-[![Translate - with Stringlate](https://img.shields.io/badge/translate%20with-stringlate-green.svg)](https://lonamiwebs.github.io/stringlate/translate?git=https%3A%2F%2Fgithub.com%2Fhastagaming%2FGitara)
 
-* If you encounter any issues (bugs, crashes, etc.) and want to help improve this project, please open an issue on [GitHub](https://github.com/hastagaming/Gitara/issues/new) describing: what the issues are; and how they were caused, to allow for re-creation and fixing of bugs.
-* This app requires minimum of for Android v5.0
+![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)
 
-### Editing Files
 
-As of version 1.5.7, Gitara no longer provides an internal texteditor, instead if you wish to edit files, you will need to have an editor app installed. 
 
-An open source editor that has been tested to work with Gitara is ["Viper Exit, nee Turbo Editor"](https://github.com/hastagaming/viper-edit)
 
-but others that support File Providers should also work.
+![Target SDK](https://img.shields.io/badge/target%20SDK-36-brightgreen)
 
-## Supported Features
 
-* Create local repositories
-* Clone remote repositories
-* Pull from origin
-* Delete local repositories
-* Browse files
-* Browse commit messages (short)
-* Checkout branches and tags
-* HTTP/HTTPS/SSH are supported (including SSH with private key passphrase)
-* Username/Password authentication is supported
-* Search local repositories
-* Private key management
-* Manually choose code language
-* `git diff` between commits
-* Import existing repositories (that is, you can copy a repository from computer and import to Gitara)
-* Checkout remote branches
-* Merge branches
-* Push merged content
-* Edit file via external app that can edit the given file type
-* Commit and push changed files
-* Committer information
-* Prompt for password
-* *Option* to save username/password
-* `git status`
-* Cancel when cloning
-* Add modified file to stage
-* View state of staged files (aka index)
-* `git rebase`
-* `git cherrypick`
-* `git checkout <file>` (reset changes of a file)
+
+
+![Kotlin](https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white)
+
+
+
+
+![ABI](https://img.shields.io/badge/ABI-arm64--v8a-orange)
+
+
+
+</div>
+
+---
+
+Gitara is a fork of [MGit](https://github.com/maks/MGit) rebuilt for current Android. It keeps the solid JGit-based Git engine and adds a modern interface, a self-contained Linux environment, and a workflow runner, so you can clone, edit, build and ship without leaving your phone.
+
+## Highlights
+
+- **Full Git on your phone**: clone, fetch, pull, push, commit, branches, tags, merge, rebase, cherry-pick, reset, diff and SSH keys, powered by JGit.
+- **Works with every Git host**: GitHub, GitLab, Bitbucket, Gitea, Forgejo, Codeberg, SourceHut and any plain HTTPS or SSH remote. Gitara recognises the host from the URL and themes the screen with its colour.
+- **Hosting-style interface**: repository list and repository page rebuilt in Jetpack Compose and Material 3, with branch chip, tabs, run history and live logs. The remaining screens are being moved over step by step.
+- **Gitara Box**: a private Alpine Linux environment (proot) inside the app. Install tools with `apk add`, no root and no external Termux.
+- **Workflows**: GitHub-Actions-like automation in YAML or TOML, with jobs, `needs`, `if`, expressions, step outputs, your own composite actions, and encrypted secrets.
+- **Your repositories stay in the app's own storage**, like Termux. No fixed size is reserved. It simply uses the free space of the device.
+- **Built for Android 15 and 16**: target SDK 36, foreground service for long builds, runtime permission handling.
 
 ## Quick start
 
-### Clone a remote repository
+1. Install the APK and open Gitara.
+2. Tap **Clone**, paste any Git URL, and choose a folder name. Add a username and token for private repositories.
+3. Open the repository and go to the **Actions** tab.
+4. Tap **Install Gitara Box** (about 4 MB, once).
+5. Tap **New**, pick **Hello Gitara**, then **Run**.
 
-1. Click on the `+` icon to add a new repository
-2. Enter remote URL (see URL format below)
-3. Enter local repository name - note that this is **not** the full path, as Gitara stores all  
-repositories in the same local directory (can be changed in Gitara settings)
-4. Click the `Clone` button
-5. If required, you will be prompted for credentials to connect to the remote repo. Gitara will download the repository (all branches) to your device
+## Workflows
 
-### Create a local repository
-1. Click on the `+` icon to add a new repository
-2. Click on `Init Local` to create a local repository
-3. Enter the name for this repository when prompted
-4. A local empty repo will be created
+Workflows live in your repository under `.gitara/workflows/` as `.yml`, `.yaml` or `.toml` files, so they travel with the code to any host.
 
-### URL format
+```yaml
+name: Build
 
-#### SSH URLs
+on:
+  manual:
+    inputs:
+      variant:
+        description: Build variant
+        default: debug
 
-* SSH running on standard port (22): `ssh://username@server_name/path/to/repo`
-* SSH running on non-standard port: `ssh://username@server_name:port/path/to/repo`
-* `username` is needed - by default, Gitara tries to connect as root.
+env:
+  GRADLE_OPTS: -Xmx2g
 
-#### HTTP(S) URLs
+jobs:
+  build:
+    name: Build
+    runs-on: gitara
+    timeout-minutes: 90
+    steps:
+      - name: Tools
+        run: apk add --no-cache bash git openjdk17
+      - id: version
+        run: echo "name=1.0.${{ inputs.variant }}" >> "$GITARA_OUTPUT"
+      - uses: ./.gitara/actions/notify
+        with:
+          message: Built ${{ steps.version.outputs.name }}
+        env:
+          TOKEN: ${{ secrets.NOTIFY_TOKEN }}
 
-* HTTP(S) URL: `https://server_name/path/to/repo`
+  report:
+    needs: build
+    if: ${{ always() }}
+    runs-on: gitara
+    steps:
+      - run: echo "build was ${{ needs.build.result }}"
+```
 
-## ToDo List
+### What is supported
 
-[Future enhancements and bugs are tracked here on Github](https://github.com/hastagaming/Gitara/issues).
+| Area | Keys and features |
+| --- | --- |
+| Workflow | `name`, `on.manual.inputs` (alias `workflow_dispatch`), `env`, `jobs` |
+| Job | `name`, `needs`, `if`, `env`, `timeout-minutes`, `outputs`, `steps` |
+| Step | `id`, `name`, `if`, `run`, `uses`, `with`, `shell`, `working-directory`, `env`, `continue-on-error`, `timeout-minutes` |
+| Shells | `sh`, `ash`, `bash`, `python3`, `node`, or a custom `cmd {0}` |
+| Contexts | `env`, `secrets`, `inputs`, `steps`, `needs`, `job`, `runner`, `gitara` (alias `github`) |
+| Functions | `success()`, `failure()`, `always()`, `cancelled()`, `contains`, `startsWith`, `endsWith`, `format`, `join`, `toJSON` |
+| Operators | `==` `!=` `<` `<=` `>` `>=` `&&` `\|\|` `!` and parentheses |
+| Files | `$GITARA_OUTPUT`, `$GITARA_ENV`, `$GITARA_PATH` (`GITHUB_*` aliases work too) |
+| Log commands | `::add-mask::`, `::error::`, `::warning::`, `::notice::` |
+
+Write `if: ${{ !cancelled() }}` or quote the value, because YAML does not accept a bare `!` at the start of a value.
+
+### Your own actions
+
+Create a composite action in `.gitara/actions/<name>/action.yml` (or `action.toml`) and call it with `uses: ./.gitara/actions/<name>`. Actions have `inputs`, `outputs` and `runs.using: composite`. The **New** button can generate a working example for you.
+
+### Secrets
+
+Open **Secrets** in the Actions tab. Secrets can be scoped to one repository or to all repositories, and are used as `${{ secrets.NAME }}`.
+
+- Encrypted with AES-GCM using a key held in the Android Keystore.
+- Never shown again after saving.
+- Masked as `***` in logs (values of 4 or more characters).
+- Generated step scripts are deleted when a run ends.
+
+## Gitara Box
+
+The Box is an Alpine Linux root filesystem that runs through [proot](https://proot-me.github.io/), launched from the app's native library directory, which is the only way to run Linux binaries from an app targeting a recent SDK.
+
+- Requires an **arm64-v8a** device.
+- The first install downloads the latest Alpine mini root filesystem and verifies its SHA-256 checksum.
+- Your repository is mounted at `/workspace`, and `/root` persists between runs, so caches such as `~/.gradle` are kept.
+- Install anything Alpine packages with `apk add` inside a workflow step.
+- Android SDK builds need the SDK and an arm64 `aapt2` installed in the Box.
+- proot is not a security sandbox and runs slower than native code. Heavy builds are best on a charger.
+
+## Storage layout
+
+```
+<app files>/
+├── home/repos/        your repositories (shown as /workspace in the Box)
+├── box/               Alpine root filesystem and run data
+├── secrets/           encrypted secrets
+└── workflow-runs/     run history and logs per repository
+```
+
+## Building from source
+
+Requirements: JDK 17, Android SDK platform 36, and internet access on the first build.
+
+```bash
+git clone https://github.com/hastagaming/Gitara.git
+cd Gitara
+./gradlew :app:assembleDebug
+```
+
+The build downloads the pinned proot package (fixed commit, verified by SHA-256) and packages it as native libraries. On Termux, point Gradle at Termux's own `aapt2` in `~/.gradle/gradle.properties`:
+
+```properties
+android.aapt2FromMavenOverride=/data/data/com.termux/files/usr/bin/aapt2
+```
+
+Release signing reads `alias`, `password` and `keystore` from Gradle properties when `-Pspecial` is set.
+
+## Project layout
+
+| Path | What lives there |
+| --- | --- |
+| `me/sheimi/sgit` | Git engine, database, legacy screens inherited from MGit |
+| `io/gitara/hosting` | Git host detection from URLs |
+| `io/gitara/ui` | Compose theme, repository list and repository detail |
+| `io/gitara/box` | Gitara Box installer, tar extractor and proot runner |
+| `io/gitara/workflow` | YAML/TOML parsing, expressions, engine and foreground service |
+| `io/gitara/secrets` | Keystore-backed secret store |
+
+## Roadmap
+
+- Interactive terminal inside the Box
+- Remote actions with `uses: owner/repo@ref`
+- `strategy.matrix`
+- One-tap toolchain presets (JDK, Android SDK, Node, Rust)
+- Account sign-in per host with issues and pull requests
+- Files, commits and diff screens rebuilt in Compose
+
+## Credits
+
+Gitara stands on the work of others:
+
+- [MGit](https://github.com/maks/MGit) by Maksim Lin, itself based on SGit by Sheimi
+- [proot](https://proot-me.github.io/) and the Android build by [green-green-avk](https://github.com/green-green-avk/build-proot-android)
+- [Alpine Linux](https://alpinelinux.org/)
+- [Eclipse JGit](https://www.eclipse.org/jgit/), [JSch (mwiede fork)](https://github.com/mwiede/jsch), [SnakeYAML Engine](https://bitbucket.org/snakeyaml/snakeyaml-engine), [Timber](https://github.com/JakeWharton/timber)
 
 ## License
 
-See [GPLv3](./LICENSE)
-
-All code written by `hastagaming@manichord.com` can at your option also be used under the [MIT license](https://en.wikipedia.org/wiki/MIT_License).
-
-## Help
-
-If you want to help improve this project, contributions, especially translations are very welcome. Also contributions to documentation via the wiki for this repo are also most welcome!
-
-### Contributing code
-
-If you would like to contribute code, either a bugfix or a new feature, please make sure there is a open issue that addresses the new code. 
-**No Pull Requests** will be merged that do not reference an existing issue in the repo.
-
-Please use the Android Studio formatting settings set for this project in the repo.
-
-All strings visible to the user need to go into strings resource file. 
-
-#### Project Goals
-
-* Provide the best GUI git client available on any platform
-* Be usable on both phone, tablet and laptop form-factor devices
-
-#### Non-goals for the project
-
-* Support for proprietary vendor APIs (eg. Github)
-
-#### Major Contributions
-
-For new features, a discussion of the new functionality may need to take place in the comments on the issue covering it, so it may be best for that to occur before you spend time on writing the new code.
-
-The app is about to have a major restructure. All new functionality in the app will be written in Kotlin/Rx per #277. Please be aware that the project is now using Data Binding Library and all future functionality should make use of it.
-
-#### Submitting a Pull Request (PR)
-Fork from this repo, create a new branch, commit your changes and then send a pull request against the **master** branch of this repo.
-
-If you are working on a branch for some time, you may find that changes to master get merged in the meantime, if that happens please do **NOT** merge master into your branch! Instead rebase your branch onto the current head of master.
+Gitara is free software released under the **GNU General Public License v3.0**. See the `LICENSE` file.

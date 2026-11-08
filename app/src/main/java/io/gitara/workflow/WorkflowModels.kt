@@ -102,20 +102,29 @@ object WorkflowParser {
     private val envPattern = Regex("^[A-Za-z_][A-Za-z0-9_]*$")
 
     fun parse(fileName: String, text: String): WorkflowParseResult = try {
-        WorkflowParseResult.Ok(fileName, workflow(fileName, load(text)))
+        WorkflowParseResult.Ok(fileName, workflow(fileName, load(fileName, text)))
     } catch (e: WorkflowException) {
         WorkflowParseResult.Failed(fileName, e.message ?: "Invalid workflow")
+    } catch (e: TomlException) {
+        WorkflowParseResult.Failed(fileName, "Invalid TOML, ${e.message}")
     } catch (e: YamlEngineException) {
         WorkflowParseResult.Failed(fileName, "Invalid YAML: " + (e.message ?: "").take(300))
     }
 
-    fun parseAction(text: String): ActionDef = try {
-        action(load(text))
+    fun parseAction(fileName: String, text: String): ActionDef = try {
+        action(load(fileName, text))
+    } catch (e: TomlException) {
+        throw WorkflowException("Invalid TOML, ${e.message}")
     } catch (e: YamlEngineException) {
         throw WorkflowException("Invalid YAML: " + (e.message ?: "").take(300))
     }
 
-    private fun load(text: String): Any? = Load(LoadSettings.builder().build()).loadFromString(text)
+    private fun load(fileName: String, text: String): Any? =
+        if (fileName.endsWith(".toml", ignoreCase = true)) {
+            Toml.parse(text)
+        } else {
+            Load(LoadSettings.builder().build()).loadFromString(text)
+        }
 
     private fun asMap(value: Any?): Map<String, Any?>? {
         if (value !is Map<*, *>) return null

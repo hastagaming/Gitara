@@ -17,7 +17,7 @@ class WorkflowStore(context: Context) {
 
     fun discover(repoDir: File): List<WorkflowParseResult> {
         val files = workflowsDir(repoDir).listFiles()
-            ?.filter { it.isFile && (it.name.endsWith(".yml") || it.name.endsWith(".yaml")) }
+            ?.filter { it.isFile && (it.name.endsWith(".yml") || it.name.endsWith(".yaml") || it.name.endsWith(".toml")) }
             ?: return emptyList()
         return files.sortedBy { it.name.lowercase() }.map { file ->
             try {
@@ -32,13 +32,19 @@ class WorkflowStore(context: Context) {
         }
     }
 
-    fun createTemplate(repoDir: File, baseName: String, content: String, extras: List<Pair<String, String>>): File {
+    fun createTemplate(
+        repoDir: File,
+        baseName: String,
+        extension: String,
+        content: String,
+        extras: List<Pair<String, String>>
+    ): File {
         val dir = workflowsDir(repoDir)
         if (!dir.isDirectory && !dir.mkdirs()) throw IOException("Cannot create ${dir.absolutePath}")
-        var file = File(dir, "$baseName.yml")
+        var file = File(dir, "$baseName.$extension")
         var counter = 2
         while (file.exists()) {
-            file = File(dir, "$baseName-$counter.yml")
+            file = File(dir, "$baseName-$counter.$extension")
             counter++
         }
         for ((relative, text) in extras) {

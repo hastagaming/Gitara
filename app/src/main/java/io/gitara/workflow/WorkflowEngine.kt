@@ -541,10 +541,10 @@ private class Runner(
         if (!(dir.path == base.path || dir.path.startsWith(base.path + File.separator))) {
             return failure("The action path is outside the repository")
         }
-        val file = listOf("action.yml", "action.yaml").map { File(dir, it) }.firstOrNull { it.isFile }
-            ?: return failure("No action.yml found in $uses")
+        val file = listOf("action.yml", "action.yaml", "action.toml").map { File(dir, it) }.firstOrNull { it.isFile }
+            ?: return failure("No action.yml, action.yaml or action.toml found in $uses")
         val action = try {
-            actionCache.getOrPut(file.path) { WorkflowParser.parseAction(file.readText(Charsets.UTF_8)) }
+            actionCache.getOrPut(file.path) { WorkflowParser.parseAction(file.name, file.readText(Charsets.UTF_8)) }
         } catch (e: WorkflowException) {
             return failure("Invalid action $uses: ${e.message}")
         }

@@ -117,7 +117,8 @@ private class WorkflowTemplate(
     val description: String,
     val baseName: String,
     val content: String,
-    val extras: List<Pair<String, String>>
+    val extras: List<Pair<String, String>>,
+    val extension: String = "yml"
 )
 
 private fun yaml(text: String): String = text.trimIndent().replace('§', '$') + "\n"
@@ -238,6 +239,99 @@ private fun workflowTemplates(): List<WorkflowTemplate> = listOf(
     )
 )
 
+private fun tomlTemplates(): List<WorkflowTemplate> = listOf(
+    WorkflowTemplate(
+        title = "Hello Gitara (TOML)",
+        description = "The same hello workflow written in TOML.",
+        baseName = "hello",
+        extension = "toml",
+        content = yaml(
+            """
+            name = "Hello Gitara"
+
+            [on.manual.inputs.who]
+            description = "Who to greet"
+            default = "world"
+
+            [jobs.hello]
+            name = "Say hello"
+            runs-on = "gitara"
+
+            [[jobs.hello.steps]]
+            name = "Greet"
+            run = ${'"'}${'"'}${'"'}
+            echo "Hello, §{{ inputs.who }}!"
+            echo "Repository: §{{ gitara.repository }}"
+            uname -a
+            ${'"'}${'"'}${'"'}
+
+            [[jobs.hello.steps]]
+            name = "Produce an output"
+            id = "stamp"
+            run = 'echo "time=§(date +%s)" >> "§GITARA_OUTPUT"'
+
+            [[jobs.hello.steps]]
+            name = "Use the output"
+            run = 'echo "Stamp was §{{ steps.stamp.outputs.time }}"'
+            """
+        ),
+        extras = emptyList()
+    ),
+    WorkflowTemplate(
+        title = "Custom action (TOML)",
+        description = "A workflow that calls a composite action defined in action.toml.",
+        baseName = "use-action",
+        extension = "toml",
+        content = yaml(
+            """
+            name = "Use a custom action"
+
+            [jobs.demo]
+            runs-on = "gitara"
+
+            [[jobs.demo.steps]]
+            id = "greet"
+            uses = "./.gitara/actions/greet-toml"
+
+            [jobs.demo.steps.with]
+            name = "Gitara"
+
+            [[jobs.demo.steps]]
+            name = "Show the action output"
+            run = 'echo "Action said: §{{ steps.greet.outputs.message }}"'
+            """
+        ),
+        extras = listOf(
+            ".gitara/actions/greet-toml/action.toml" to yaml(
+                """
+                name = "Greet"
+                description = "Print a greeting and expose it as an output"
+
+                [inputs.name]
+                description = "Who to greet"
+                default = "Gitara"
+
+                [outputs.message]
+                description = "The greeting"
+                value = "§{{ steps.build.outputs.message }}"
+
+                [runs]
+                using = "composite"
+
+                [[runs.steps]]
+                id = "build"
+                shell = "sh"
+                run = 'echo "message=Hello, §{{ inputs.name }}!" >> "§GITARA_OUTPUT"'
+
+                [[runs.steps]]
+                shell = "sh"
+                run = 'echo "§{{ steps.build.outputs.message }}"'
+                """
+            )
+        )
+    )
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkflowPane(repo: Repo, controller: RepoDetailController, modifier: Modifier = Modifier) {
@@ -334,7 +428,7 @@ fun WorkflowPane(repo: Repo, controller: RepoDetailController, modifier: Modifie
     fun createFromTemplate(template: WorkflowTemplate) {
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { store.createTemplate(repoDir, template.baseName, template.content, template.extras) }
+                runCatching { store.createTemplate(repoDir, template.baseName, template.extension, template.content, template.extras) }
             }
             result.onSuccess {
                 reloadTick++
@@ -484,7 +578,7 @@ fun WorkflowPane(repo: Repo, controller: RepoDetailController, modifier: Modifie
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
                 )
-                workflowTemplates().forEach { template ->
+                (workflowTemplates() + tomlTemplates()).forEach { template ->
                     ListItem(
                         headlineContent = { Text(template.title) },
                         supportingContent = { Text(template.description) },
