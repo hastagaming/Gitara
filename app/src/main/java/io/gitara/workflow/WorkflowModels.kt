@@ -46,7 +46,8 @@ data class WorkflowDefinition(
     val name: String,
     val env: Map<String, String>,
     val inputs: Map<String, InputDef>,
-    val jobs: List<JobDef>
+    val jobs: List<JobDef>,
+    val sandboxed: Boolean = false
 ) {
     val stepCount: Int get() = jobs.sumOf { it.steps.size }
 }

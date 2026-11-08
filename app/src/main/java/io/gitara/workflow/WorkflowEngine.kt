@@ -9,6 +9,7 @@ import io.gitara.box.BoxRuntime
 import io.gitara.box.ProcessOutcome
 import io.gitara.box.deleteTree
 import io.gitara.secrets.SecretStore
+import io.gitara.plugins.PluginStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -117,7 +118,8 @@ private class Scope(
     val env: LinkedHashMap<String, String>,
     val needs: Map<String, Any?>,
     var jobStatus: String,
-    val deadline: Long
+    val deadline: Long,
+    val secretsVisible: Boolean = true
 ) {
     val steps = LinkedHashMap<String, Any?>()
 }
@@ -303,7 +305,7 @@ private class Runner(
     private fun context(scope: Scope): ExprContext {
         val vars = HashMap<String, Any?>()
         vars["env"] = scope.env
-        vars["secrets"] = secrets
+        vars["secrets"] = if (scope.secretsVisible) secrets else emptyMap<String, String>()
         vars["inputs"] = scope.inputs
         vars["steps"] = scope.steps
         vars["needs"] = scope.needs
@@ -328,7 +330,7 @@ private class Runner(
         }
         val needsOk = job.needs.all { results[it]?.status == "success" }
         val deadline = SystemClock.elapsedRealtime() + (job.timeoutMinutes ?: 360) * 60_000L
-        val scope = Scope(inputsContext, LinkedHashMap(), needsContext, if (needsOk) "success" else "failure", deadline)
+        val scope = Scope(inputsContext, LinkedHashMap(), needsContext, if (needsOk) "success" else "failure", deadline, !definition.sandboxed)
 
         log.line("")
         log.line("▶ Job: ${job.label}")
@@ -530,19 +532,27 @@ private class Runner(
     private fun execUses(step: StepDef, scope: Scope, ctx: ExprContext, depth: Int): StepResult {
         if (depth >= 8) return failure("Actions are nested too deeply")
         val uses = Expr.interpolate(step.uses.orEmpty(), ctx).trim()
-        if (!uses.startsWith("./")) return failure("Only local actions are supported: uses: ./path/to/action")
+        val fromPlugin = uses.startsWith("plugin:")
 
-        val base = repoDir.canonicalFile
-        val dir = try {
-            File(base, uses.removePrefix("./")).canonicalFile
-        } catch (e: IOException) {
-            return failure("Cannot resolve $uses")
+        val file: File = if (fromPlugin) {
+            PluginStore(appContext).actionFile(uses.removePrefix("plugin:"))
+                ?: return failure("Plugin action not found, or its plugin is disabled: $uses")
+        } else {
+            if (!uses.startsWith("./")) {
+                return failure("Use uses: ./path for repository actions or uses: plugin:<plugin>/<action> for plugin actions")
+            }
+            val base = repoDir.canonicalFile
+            val dir = try {
+                File(base, uses.removePrefix("./")).canonicalFile
+            } catch (e: IOException) {
+                return failure("Cannot resolve $uses")
+            }
+            if (!(dir.path == base.path || dir.path.startsWith(base.path + File.separator))) {
+                return failure("The action path is outside the repository")
+            }
+            listOf("action.yml", "action.yaml", "action.toml").map { File(dir, it) }.firstOrNull { it.isFile }
+                ?: return failure("No action.yml, action.yaml or action.toml found in $uses")
         }
-        if (!(dir.path == base.path || dir.path.startsWith(base.path + File.separator))) {
-            return failure("The action path is outside the repository")
-        }
-        val file = listOf("action.yml", "action.yaml", "action.toml").map { File(dir, it) }.firstOrNull { it.isFile }
-            ?: return failure("No action.yml, action.yaml or action.toml found in $uses")
         val action = try {
             actionCache.getOrPut(file.path) { WorkflowParser.parseAction(file.name, file.readText(Charsets.UTF_8)) }
         } catch (e: WorkflowException) {
@@ -565,7 +575,14 @@ private class Runner(
             if (key !in action.inputs) log.line("${"  ".repeat(depth)}! Unknown input '$key' for $uses")
         }
 
-        val inner = Scope(values, LinkedHashMap(scope.env), scope.needs, "success", scope.deadline)
+        val inner = Scope(
+            values,
+            LinkedHashMap(scope.env),
+            scope.needs,
+            "success",
+            scope.deadline,
+            scope.secretsVisible && !fromPlugin
+        )
         for (inside in action.steps) runStep(null, inside, inner, depth + 1)
 
         val outputs = LinkedHashMap<String, String>()

@@ -135,6 +135,24 @@ The Box is an Alpine Linux root filesystem that runs through [proot](https://pro
 - Android SDK builds need the SDK and an arm64 `aapt2` installed in the Box.
 - proot is not a security sandbox and runs slower than native code. Heavy builds are best on a charger.
 
+## Plugins
+
+Plugins extend workflows without touching the app. A plugin is a folder with a `plugin.yml` manifest (YAML only), installed from any HTTPS Git URL or from a repository you already cloned in Gitara.
+
+| Folder | Adds |
+| --- | --- |
+| `actions/<name>/action.yml` | Composite actions, used as `uses: plugin:<id>/<name>` |
+| `templates/*.yml` | Workflow templates in the **New workflow** list |
+| `commands` in `plugin.yml` | One-tap commands that run in the Gitara Box |
+
+Plugin actions and commands never see `${{ secrets.* }}`. Pass a secret explicitly with `with:` if a plugin needs it. Plugins run arbitrary commands in the Box, so install only what you trust.
+
+## Releases
+
+Releases are cut from tags. Push `vMAJOR.MINOR.PATCH` (for example `v1.2.3`) and CI builds the app, then signs that exact APK with the release keystore and publishes it to GitHub Releases. Tags with a suffix such as `v1.2.3-rc.1` become pre-releases.
+
+`versionName` is the tag without the `v`, and `versionCode` is derived from it, so every tag gets a higher code than the previous one.
+
 ## Storage layout
 
 ```

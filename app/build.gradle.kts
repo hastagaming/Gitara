@@ -13,6 +13,62 @@ kotlin {
     }
 }
 
+fun secret(name: String): String? =
+    providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
+        ?: providers.gradleProperty(name).orNull?.takeIf { it.isNotBlank() }
+
+fun explicitTag(): String? {
+    providers.gradleProperty("gitaraTag").orNull?.takeIf { it.isNotBlank() }?.let { return it }
+    if (providers.environmentVariable("GITHUB_REF_TYPE").orNull == "tag") {
+        return providers.environmentVariable("GITHUB_REF_NAME").orNull?.takeIf { it.isNotBlank() }
+    }
+    return null
+}
+
+fun describedTag(): String? = try {
+    providers.exec {
+        commandLine("git", "describe", "--tags", "--exact-match")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().takeIf { it.isNotEmpty() }
+} catch (e: Exception) {
+    null
+}
+
+fun parseVersion(tag: String): Pair<String, Int>? {
+    val match = Regex("^v?(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})(?:-([0-9A-Za-z.-]+))?$").matchEntire(tag.trim())
+        ?: return null
+    val major = match.groupValues[1].toInt()
+    val minor = match.groupValues[2].toInt()
+    val patch = match.groupValues[3].toInt()
+    val suffix = match.groupValues[4]
+    if (major > 209) throw GradleException("The major version cannot exceed 209 (Android versionCode limit).")
+    val stage = if (suffix.isEmpty()) {
+        9
+    } else {
+        (Regex("(\\d+)$").find(suffix)?.groupValues?.get(1)?.toIntOrNull() ?: 0).coerceAtMost(8)
+    }
+    val code = (major * 1_000_000 + minor * 1_000 + patch) * 10 + stage
+    return tag.trim().removePrefix("v") to code
+}
+
+fun appVersion(): Pair<String, Int> {
+    val explicit = explicitTag()
+    if (explicit != null) {
+        return parseVersion(explicit) ?: throw GradleException(
+            "The tag '$explicit' is not a valid version. Use vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-suffix, for example v1.2.3 or v1.2.3-rc.1."
+        )
+    }
+    return describedTag()?.let { parseVersion(it) } ?: ("0.0.0-dev" to 1)
+}
+
+val (appVersionName, appVersionCode) = appVersion()
+
+val signingStore = secret("GITARA_KEYSTORE")
+val signingStorePassword = secret("GITARA_KEYSTORE_PASSWORD")
+val signingAlias = secret("GITARA_KEY_ALIAS")
+val signingKeyPassword = secret("GITARA_KEY_PASSWORD") ?: signingStorePassword
+val canSign = signingStore != null && signingStorePassword != null && signingAlias != null
+
 val prootCommit = "01f83b8841358450c78333d1b33ab30d4943bec4"
 val prootSha256 = "9629eb30cdf86e95c6ba681f8ab89c6fdaa9eca093d5577163513c99af5ca281"
 val prootArchive = layout.buildDirectory.file("proot/proot-android-aarch64.tar.gz")
@@ -85,8 +141,8 @@ android {
 
         vectorDrawables.useSupportLibrary = true
 
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -101,6 +157,7 @@ android {
 
     lint {
         abortOnError = false
+        checkReleaseBuilds = false
     }
 
     packaging {
@@ -113,17 +170,12 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            if (project.hasProperty("special")) {
-                keyAlias = project.property("alias") as String
-                keyPassword = project.property("password") as String
-                storeFile = file(project.property("keystore") as String)
-                storePassword = project.property("password") as String
-            } else {
-                keyAlias = ""
-                keyPassword = ""
-                storeFile = file("/empty")
-                storePassword = ""
+        if (canSign) {
+            create("release") {
+                storeFile = file(signingStore!!)
+                storePassword = signingStorePassword
+                keyAlias = signingAlias
+                keyPassword = signingKeyPassword
             }
         }
     }
@@ -133,7 +185,7 @@ android {
             applicationIdSuffix = ".debug"
         }
         getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 }

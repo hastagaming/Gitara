@@ -98,6 +98,8 @@ import io.gitara.workflow.WorkflowDefinition
 import io.gitara.workflow.WorkflowEngine
 import io.gitara.workflow.WorkflowParseResult
 import io.gitara.workflow.WorkflowStore
+import io.gitara.plugins.PluginStore
+import io.gitara.plugins.PluginTemplate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -341,6 +343,7 @@ fun WorkflowPane(repo: Repo, controller: RepoDetailController, modifier: Modifie
     val snackbar = remember { SnackbarHostState() }
     val store = remember { WorkflowStore(appContext) }
     val secretStore = remember { SecretStore(appContext) }
+    val pluginStore = remember { PluginStore(appContext) }
     val repoId = remember(repo) { repo.getID() }
     val repoDir = remember(repo) { repo.getDir() }
 
@@ -363,9 +366,17 @@ fun WorkflowPane(repo: Repo, controller: RepoDetailController, modifier: Modifie
             secretStore.names(SecretStore.GLOBAL).size + secretStore.names(SecretStore.repoScope(repoId)).size
         }
     }
+    var showPlugins by remember { mutableStateOf(false) }
+    var pluginsTick by remember { mutableIntStateOf(0) }
+    val pluginCount by produceState(0, pluginsTick) {
+        value = withContext(Dispatchers.IO) { pluginStore.list().size }
+    }
 
     var openRun by remember { mutableStateOf<RunTarget?>(null) }
     var showTemplates by remember { mutableStateOf(false) }
+    val pluginTemplates by produceState(emptyList<PluginTemplate>(), showTemplates, pluginsTick) {
+        value = withContext(Dispatchers.IO) { pluginStore.templates() }
+    }
     var showSecrets by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<String?>(null) }
     var confirmReset by remember { mutableStateOf(false) }
@@ -479,6 +490,9 @@ fun WorkflowPane(repo: Repo, controller: RepoDetailController, modifier: Modifie
                 item(key = "secrets") {
                     SecretsCard(count = secretCount, onManage = { showSecrets = true })
                 }
+                item(key = "plugins") {
+                    PluginsCard(count = pluginCount, onManage = { showPlugins = true })
+                }
 
                 if (live != null) {
                     item(key = "live") {
@@ -578,7 +592,15 @@ fun WorkflowPane(repo: Repo, controller: RepoDetailController, modifier: Modifie
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
                 )
-                (workflowTemplates() + tomlTemplates()).forEach { template ->
+                (workflowTemplates() + tomlTemplates() + pluginTemplates.map { t ->
+                    WorkflowTemplate(
+                        title = t.pluginName + ": " + t.title,
+                        description = "From the plugin " + t.pluginName,
+                        baseName = t.baseName,
+                        content = t.content,
+                        extras = emptyList()
+                    )
+                }).forEach { template ->
                     ListItem(
                         headlineContent = { Text(template.title) },
                         supportingContent = { Text(template.description) },
@@ -600,6 +622,21 @@ fun WorkflowPane(repo: Repo, controller: RepoDetailController, modifier: Modifie
             onDismiss = {
                 showSecrets = false
                 secretsTick++
+            }
+        )
+    }
+    if (showPlugins) {
+        PluginsSheet(
+            store = pluginStore,
+            repoDir = repoDir,
+            onRunCommand = { definition ->
+                showPlugins = false
+                pluginsTick++
+                gate(RunRequest(definition, emptyMap()), false)
+            },
+            onDismiss = {
+                showPlugins = false
+                pluginsTick++
             }
         )
     }

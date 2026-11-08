@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["Build"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    name: Sign and publish
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that the build belongs to a tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > /dev/null 2>&1; then
+            echo "is_tag=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download the unsigned APK from the build
+        if: steps.tag.outputs.is_tag == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: gitara-release-unsigned
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: unsigned
+
+      - name: Sign the APK
+        if: steps.tag.outputs.is_tag == 'true'
+        env:
+          TAG: ${{ github.event.workflow_run.head_branch }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS; do
+            if [ -z "${!name}" ]; then
+              echo "::error::The secret $name is not set"
+              exit 1
+            fi
+          done
+          export KEY_PASSWORD="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+          BUILD_TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          APK="$(ls unsigned/*.apk | head -1)"
+          OUT="signed/Gitara-${TAG}.apk"
+          mkdir -p signed
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$RUNNER_TEMP/release.jks" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KEYSTORE_PASSWORD \
+            --key-pass env:KEY_PASSWORD \
+            --out "$OUT" "$APK"
+          "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
+          rm -f "$RUNNER_TEMP/release.jks"
+          (cd signed && sha256sum "Gitara-${TAG}.apk" > "Gitara-${TAG}.apk.sha256")
+
+      - name: Publish the GitHub release
+        if: steps.tag.outputs.is_tag == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          FLAGS=""
+          case "$TAG" in
+            *-*) FLAGS="--prerelease" ;;
+          esac
+          gh release create "$TAG" signed/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "Gitara $TAG" \
+            --generate-notes $FLAGS

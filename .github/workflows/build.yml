@@ -3,42 +3,60 @@ name: Build
 on:
   push:
     branches:
-      - master
+      - "**"
+    tags:
+      - "v*"
   pull_request:
-    types: [opened, synchronize]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
+    name: Build APKs
     runs-on: ubuntu-latest
-
+    timeout-minutes: 45
     steps:
-    - uses: actions/checkout@v4
-    - name: set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: 17
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Install AAPT2
-      shell: bash
-      run: |
-        AAPT2_VERSION="9.5.0-16666295"
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-        URL="https://dl.google.com/dl/android/maven2/com/android/tools/build/aapt2/${AAPT2_VERSION}/aapt2-${AAPT2_VERSION}-linux.jar"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-        mkdir -p "$HOME/aapt2"
-        curl -fL "$URL" -o "$HOME/aapt2/aapt2.jar"
+      - name: Make the Gradle wrapper executable
+        run: chmod +x gradlew
 
-        cd "$HOME/aapt2"
-        unzip -oq aapt2.jar
-        chmod +x aapt2
+      - name: Build the debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
 
-        echo "android.aapt2FromMavenOverride=$HOME/aapt2/aapt2" >> "$GITHUB_WORKSPACE/gradle.properties"
+      - name: Upload the debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitara-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
 
-    - name: Build with Gradle
-      run: ./gradlew --no-daemon clean assembleDebug testDebug
+      - name: Build the unsigned release APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: ./gradlew :app:assembleRelease --stacktrace
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: gitara-debug
-        path: app/build/outputs/apk/debug/*.apk
+      - name: Upload the unsigned release APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitara-release-unsigned
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

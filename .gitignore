@@ -49,3 +49,7 @@ local.properties
 *.iws
 *.ipr
 app/src/main/resources
+
+# Keystore
+*.jks
+*.keystore
