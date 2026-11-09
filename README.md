@@ -137,15 +137,25 @@ The Box is an Alpine Linux root filesystem that runs through [proot](https://pro
 
 ## Plugins
 
-Plugins extend workflows without touching the app. A plugin is a folder with a `plugin.yml` manifest (YAML only), installed from any HTTPS Git URL or from a repository you already cloned in Gitara.
+Plugins add workflow actions, workflow templates and one-tap commands. They come from plugin repositories, and the default one is the **Gitara Community Repository**, [GCR](https://github.com/hastagaming/GCR).
 
-| Folder | Adds |
-| --- | --- |
-| `actions/<name>/action.yml` | Composite actions, used as `uses: plugin:<id>/<name>` |
-| `templates/*.yml` | Workflow templates in the **New workflow** list |
-| `commands` in `plugin.yml` | One-tap commands that run in the Gitara Box |
+Open **Actions → Plugins** inside a repository:
 
-Plugin actions and commands never see `${{ secrets.* }}`. Pass a secret explicitly with `with:` if a plugin needs it. Plugins run arbitrary commands in the Box, so install only what you trust.
+- **Browse** shows the plugins of the selected repository, with their README, supported Gitara versions and dependencies.
+- **Installed** lets you disable, uninstall and run plugin commands. If you cloned a fork of GCR in Gitara, you can also install a plugin from it for testing.
+- **Repositories** lets you add other people's plugin repositories and choose which one is the default.
+
+A plugin only works with the Gitara versions it lists in its `VERSION_SUPPORT` file. Plugin actions and commands never see your secrets unless you pass them in with `with:`.
+
+To write a plugin, fork GCR and follow its README. Accepted plugins join the official GCR.
+
+## Official plugin repositories
+
+Repositories listed here are shown as **Official** in Gitara. Any other repository can still be added, but it is marked as not on the official list. To get a repository listed, open a pull request that adds it below.
+
+<!-- GCR-OFFICIAL-START -->
+- [GCR](https://github.com/hastagaming/GCR), the Gitara Community Repository (default)
+<!-- GCR-OFFICIAL-END -->
 
 ## Releases
 

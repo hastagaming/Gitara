@@ -46,6 +46,10 @@ public class RepoListActivity extends SheimiFragmentActivity implements RepoList
 
     private final RepoListController controller = new RepoListController();
 
+    public enum ClickActions {
+        CLONE, CANCEL
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

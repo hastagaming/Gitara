@@ -7,19 +7,22 @@ import io.gitara.box.deleteTree
 import io.gitara.workflow.JobDef
 import io.gitara.workflow.StepDef
 import io.gitara.workflow.WorkflowDefinition
-import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import java.io.File
-import java.io.IOException
 import java.nio.file.Files
+import java.util.Locale
+
+typealias PluginResolver = (PluginDependency, String) -> Pair<CatalogPlugin, String>?
 
 data class PluginInfo(
     val id: String,
-    val manifest: PluginManifest?,
+    val meta: PluginMeta?,
     val error: String?,
     val enabled: Boolean,
+    val compatible: Boolean,
     val source: String
-)
+) {
+    val active: Boolean get() = enabled && compatible && meta != null
+}
 
 data class PluginTemplate(
     val pluginName: String,
@@ -38,39 +41,56 @@ class PluginStore(context: Context) {
 
     private val appContext = context.applicationContext
     private val root = File(appContext.filesDir, "home/plugins")
+    private val currentVersion: String by lazy { readGitaraVersion() }
+
+    fun gitaraVersion(): String = currentVersion
 
     fun list(): List<PluginInfo> {
         val dirs = root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") } ?: return emptyList()
-        return dirs.sortedBy { it.name }.map { readInfo(it) }
+        return dirs.sortedBy { it.name }.map { dir ->
+            val source = File(dir, ".source").takeIf { it.isFile }?.readText(Charsets.UTF_8)?.trim().orEmpty()
+            val enabled = !File(dir, ".disabled").exists()
+            try {
+                val meta = PluginFormats.readMeta(dir)
+                PluginInfo(dir.name, meta, null, enabled, PluginFormats.isSupported(currentVersion, meta.supported), source)
+            } catch (e: Exception) {
+                PluginInfo(dir.name, null, e.message ?: "Invalid plugin", enabled, false, source)
+            }
+        }
     }
 
-    fun commands(): List<PluginCommandRef> = list().flatMap { info ->
-        val manifest = info.manifest
-        if (!info.enabled || manifest == null) {
-            emptyList()
-        } else {
-            manifest.commands.map { PluginCommandRef(info.id, manifest.name, it) }
+    fun installedVersion(id: String): String? {
+        val file = File(root, "$id/VERSION")
+        if (!file.isFile) return null
+        return try {
+            PluginFormats.parseVersion(file.readText(Charsets.UTF_8))
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun commands(): List<PluginCommandRef> = list().filter { it.active }.flatMap { info ->
+        val meta = info.meta ?: return@flatMap emptyList<PluginCommandRef>()
+        yamlFiles(File(root, "${info.id}/main/commands")).mapNotNull { file ->
+            PluginFormats.readCommand(file)?.let { PluginCommandRef(info.id, meta.title, it) }
         }
     }
 
     fun templates(): List<PluginTemplate> {
         val out = ArrayList<PluginTemplate>()
         for (info in list()) {
-            val manifest = info.manifest
-            if (!info.enabled || manifest == null) continue
-            val files = File(root, "${info.id}/templates").listFiles()
-                ?.filter { it.isFile && (it.name.endsWith(".yml") || it.name.endsWith(".yaml")) && it.length() <= MAX_TEMPLATE_BYTES }
-                ?.sortedBy { it.name }
-                ?: continue
-            for (file in files) {
+            val meta = info.meta
+            if (!info.active || meta == null) continue
+            for (file in yamlFiles(File(root, "${info.id}/main/templates"))) {
+                if (file.length() > MAX_FILE) continue
                 val content = try {
                     file.readText(Charsets.UTF_8)
-                } catch (e: IOException) {
+                } catch (e: Exception) {
                     continue
                 }
-                val title = TITLE.find(content)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+                val title = TITLE_NAME.find(content)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
                     ?: file.nameWithoutExtension
-                out.add(PluginTemplate(manifest.name, title, file.nameWithoutExtension, content))
+                out.add(PluginTemplate(meta.title, title, file.nameWithoutExtension, content))
             }
         }
         return out
@@ -81,10 +101,10 @@ class PluginStore(context: Context) {
         if (slash <= 0) return null
         val pluginId = reference.substring(0, slash)
         val actionId = reference.substring(slash + 1)
-        if (!PLUGIN_ID.matches(pluginId) || !ACTION_ID.matches(actionId)) return null
+        if (!PluginFormats.ID.matches(pluginId) || !ACTION_ID.matches(actionId)) return null
         val dir = File(root, pluginId)
-        if (!dir.isDirectory || File(dir, ".disabled").exists()) return null
-        val actionDir = File(dir, "actions/$actionId")
+        if (!isActive(dir)) return null
+        val actionDir = File(dir, "main/actions/$actionId")
         return listOf("action.yml", "action.yaml").map { File(actionDir, it) }.firstOrNull { it.isFile }
     }
 
@@ -122,58 +142,27 @@ class PluginStore(context: Context) {
         )
     }
 
-    fun hasManifest(directory: File): Boolean = manifestFile(directory) != null
-
-    fun installFrom(directory: File, source: String): PluginManifest {
-        val file = manifestFile(directory) ?: throw PluginException("No plugin.yml found in this folder")
-        val manifest = PluginManifestParser.parse(file.readText(Charsets.UTF_8))
-        checkCompatible(manifest)
-        if (treeSize(directory) > MAX_PLUGIN_BYTES) throw PluginException("The plugin is larger than 20 MB")
-
-        root.mkdirs()
-        val temp = File(root, ".install-${manifest.id}")
-        deleteTree(temp)
-        copyTree(directory, temp)
-        File(temp, ".source").writeText(source, Charsets.UTF_8)
-
-        val target = File(root, manifest.id)
-        val wasDisabled = File(target, ".disabled").exists()
-        deleteTree(target)
-        if (!temp.renameTo(target)) {
-            deleteTree(temp)
-            throw PluginException("Could not install the plugin")
-        }
-        if (wasDisabled) File(target, ".disabled").createNewFile()
-        return manifest
+    fun localCandidates(repoDir: File): List<File> {
+        val found = File(repoDir, "plugins").listFiles()
+            ?.filter { it.isDirectory && !it.name.startsWith(".") && File(it, "main").isDirectory && File(it, "VERSION").isFile }
+            ?.sortedBy { it.name }
+        if (!found.isNullOrEmpty()) return found
+        return if (File(repoDir, "main").isDirectory && File(repoDir, "VERSION").isFile) listOf(repoDir) else emptyList()
     }
 
-    fun installFromGit(url: String, username: String, token: String, onStage: (String) -> Unit): PluginManifest {
-        val trimmed = url.trim()
-        if (!trimmed.startsWith("https://") && !trimmed.startsWith("http://")) {
-            throw PluginException("Use an https:// URL")
-        }
-        val work = File(appContext.cacheDir, "plugin-clone-${System.nanoTime()}")
-        try {
-            onStage("Cloning…")
-            val command = Git.cloneRepository().setURI(trimmed).setDirectory(work)
-            if (token.isNotEmpty()) {
-                command.setCredentialsProvider(UsernamePasswordCredentialsProvider(username.ifEmpty { "token" }, token))
-            }
-            val git = command.call()
-            git.repository.close()
-            onStage("Installing…")
-            return installFrom(work, trimmed)
-        } catch (e: PluginException) {
-            throw e
-        } catch (e: Exception) {
-            throw PluginException("Clone failed: ${e.message ?: e.javaClass.simpleName}")
-        } finally {
-            deleteTree(work)
-        }
+    fun installLocal(dir: File, onStage: (String) -> Unit): List<String> {
+        val meta = PluginFormats.readMeta(dir)
+        return install(CatalogPlugin(meta.id, meta, null, dir), "local:" + dir.name, { _, _ -> null }, onStage)
+    }
+
+    fun install(plugin: CatalogPlugin, repoUrl: String, resolve: PluginResolver, onStage: (String) -> Unit): List<String> {
+        val installed = ArrayList<String>()
+        installRecursive(plugin, repoUrl, resolve, onStage, installed, HashSet(), 0)
+        return installed
     }
 
     fun setEnabled(id: String, enabled: Boolean) {
-        if (!PLUGIN_ID.matches(id)) return
+        if (!PluginFormats.ID.matches(id)) return
         val dir = File(root, id)
         if (!dir.isDirectory) return
         val marker = File(dir, ".disabled")
@@ -181,82 +170,150 @@ class PluginStore(context: Context) {
     }
 
     fun uninstall(id: String) {
-        if (!PLUGIN_ID.matches(id)) return
+        if (!PluginFormats.ID.matches(id)) return
+        val dependents = list()
+            .filter { it.id != id && it.meta?.dependencies?.any { dep -> dep.id == id } == true }
+            .map { it.id }
+        if (dependents.isNotEmpty()) {
+            throw PluginException("Required by ${dependents.joinToString(", ")}. Uninstall those first.")
+        }
         deleteTree(File(root, id))
     }
 
-    private fun readInfo(dir: File): PluginInfo {
-        val source = File(dir, ".source").takeIf { it.isFile }?.readText(Charsets.UTF_8)?.trim().orEmpty()
-        val enabled = !File(dir, ".disabled").exists()
-        val file = manifestFile(dir)
-        if (file == null) return PluginInfo(dir.name, null, "plugin.yml is missing", enabled, source)
-        return try {
-            PluginInfo(dir.name, PluginManifestParser.parse(file.readText(Charsets.UTF_8)), null, enabled, source)
-        } catch (e: Exception) {
-            PluginInfo(dir.name, null, e.message ?: "Invalid plugin", enabled, source)
+    private fun installRecursive(
+        plugin: CatalogPlugin,
+        repoUrl: String,
+        resolve: PluginResolver,
+        onStage: (String) -> Unit,
+        installed: MutableList<String>,
+        visiting: MutableSet<String>,
+        depth: Int
+    ) {
+        if (depth > 8) throw PluginException("The dependencies are nested too deeply")
+        val meta = plugin.meta ?: throw PluginException("${plugin.id}: ${plugin.error ?: "invalid plugin"}")
+        if (!visiting.add(meta.id)) throw PluginException("Circular dependency involving ${meta.id}")
+        if (!PluginFormats.isSupported(currentVersion, meta.supported)) {
+            throw PluginException(
+                "${meta.id} supports Gitara ${meta.supported.joinToString(", ")} only (this is v$currentVersion)"
+            )
+        }
+        for (dep in meta.dependencies) {
+            val have = installedVersion(dep.id)
+            val minimum = dep.minVersion.ifEmpty { "0.0.0" }
+            if (have != null && PluginFormats.compareVersions(have, minimum) >= 0) continue
+            val found = resolve(dep, repoUrl) ?: throw PluginException(
+                "${meta.id} needs the plugin '${dep.id}' ${dep.minVersion}, which was not found. " +
+                    "Add the repository that provides it first."
+            )
+            val depMeta = found.first.meta
+            if (depMeta != null && PluginFormats.compareVersions(depMeta.version, minimum) < 0) {
+                throw PluginException("${meta.id} needs ${dep.id} $minimum or newer, but the repository has ${depMeta.version}")
+            }
+            installRecursive(found.first, found.second, resolve, onStage, installed, visiting, depth + 1)
+        }
+        onStage("Installing ${meta.id} ${meta.version}…")
+        copyIn(plugin.dir, meta.id, repoUrl)
+        installed.add(meta.id)
+        visiting.remove(meta.id)
+    }
+
+    private fun copyIn(from: File, id: String, source: String) {
+        validateTree(from)
+        root.mkdirs()
+        val temp = File(root, ".install-$id")
+        deleteTree(temp)
+        copyTree(from, temp, true)
+        File(temp, ".source").writeText(source, Charsets.UTF_8)
+        val target = File(root, id)
+        val wasDisabled = File(target, ".disabled").exists()
+        deleteTree(target)
+        if (!temp.renameTo(target)) {
+            deleteTree(temp)
+            throw PluginException("Could not install $id")
+        }
+        if (wasDisabled) File(target, ".disabled").createNewFile()
+    }
+
+    private fun validateTree(dir: File) {
+        for (entry in dir.listFiles().orEmpty()) {
+            if (Files.isSymbolicLink(entry.toPath())) throw PluginException("Symbolic links are not allowed (${entry.name})")
+            if (entry.name !in ROOT_ALLOWED) throw PluginException("Unexpected entry '${entry.name}' in the plugin")
+        }
+        var total = 0L
+        fun walk(folder: File, area: String) {
+            for (child in folder.listFiles().orEmpty()) {
+                if (Files.isSymbolicLink(child.toPath())) throw PluginException("Symbolic links are not allowed (${child.name})")
+                if (child.isDirectory) {
+                    walk(child, area)
+                    continue
+                }
+                if (!NAME.matches(child.name)) throw PluginException("Forbidden file name: ${child.name}")
+                val ext = child.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+                val allowed = when (area) {
+                    "assets" -> ext == "png" || ext == "svg" || ext == "xml"
+                    "main" -> ext == "yml" || ext == "yaml"
+                    else -> ext == "yml"
+                }
+                if (!allowed) throw PluginException("File type not allowed in $area/: ${child.name}")
+                if (child.length() > MAX_FILE) throw PluginException("${child.name} is larger than 1 MB")
+                total += child.length()
+            }
+        }
+        for (area in listOf("assets", "main", "including")) {
+            val folder = File(dir, area)
+            if (folder.isDirectory) walk(folder, area)
+        }
+        if (total > MAX_TOTAL) throw PluginException("The plugin is larger than 10 MB")
+    }
+
+    private fun copyTree(from: File, to: File, atRoot: Boolean) {
+        to.mkdirs()
+        for (child in from.listFiles().orEmpty()) {
+            if (atRoot && child.name == "build.sh") continue
+            val target = File(to, child.name)
+            if (child.isDirectory) copyTree(child, target, false) else child.copyTo(target, overwrite = true)
         }
     }
 
-    private fun manifestFile(directory: File): File? =
-        listOf("plugin.yml", "plugin.yaml").map { File(directory, it) }.firstOrNull { it.isFile }
+    private fun isActive(dir: File): Boolean {
+        if (!dir.isDirectory || File(dir, ".disabled").exists()) return false
+        return try {
+            val support = PluginFormats.parseVersionSupport(File(dir, "VERSION_SUPPORT").readText(Charsets.UTF_8))
+            PluginFormats.isSupported(currentVersion, support)
+        } catch (e: Exception) {
+            false
+        }
+    }
 
-    private fun checkCompatible(manifest: PluginManifest) {
-        if (manifest.minGitara.isEmpty()) return
-        val required = versionParts(manifest.minGitara) ?: return
+    private fun yamlFiles(dir: File): List<File> =
+        dir.listFiles()
+            ?.filter { it.isFile && (it.name.endsWith(".yml") || it.name.endsWith(".yaml")) }
+            ?.sortedBy { it.name }
+            ?: emptyList()
+
+    private fun readGitaraVersion(): String {
         val pm = appContext.packageManager
-        val info = if (Build.VERSION.SDK_INT >= 33) {
-            pm.getPackageInfo(appContext.packageName, PackageManager.PackageInfoFlags.of(0))
-        } else {
-            legacyPackageInfo(pm)
-        }
-        val name = info.versionName ?: return
-        if (name.contains("dev")) return
-        val current = versionParts(name) ?: return
-        for (i in 0..2) {
-            if (required[i] != current[i]) {
-                if (required[i] > current[i]) {
-                    throw PluginException("This plugin needs Gitara ${manifest.minGitara} or newer (you have $name)")
-                }
-                return
+        val info = try {
+            if (Build.VERSION.SDK_INT >= 33) {
+                pm.getPackageInfo(appContext.packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                legacyPackageInfo(pm)
             }
+        } catch (e: PackageManager.NameNotFoundException) {
+            return "0.0.0-dev"
         }
+        return info.versionName ?: "0.0.0-dev"
     }
 
     @Suppress("DEPRECATION")
     private fun legacyPackageInfo(pm: PackageManager) = pm.getPackageInfo(appContext.packageName, 0)
 
-    private fun versionParts(text: String): List<Int>? {
-        val match = Regex("^v?(\\d+)(?:\\.(\\d+))?(?:\\.(\\d+))?").find(text.trim()) ?: return null
-        return listOf(
-            match.groupValues[1].toInt(),
-            match.groupValues[2].toIntOrNull() ?: 0,
-            match.groupValues[3].toIntOrNull() ?: 0
-        )
-    }
-
-    private fun treeSize(dir: File): Long {
-        var total = 0L
-        for (child in dir.listFiles().orEmpty()) {
-            if (child.name == ".git" || Files.isSymbolicLink(child.toPath())) continue
-            total += if (child.isDirectory) treeSize(child) else child.length()
-        }
-        return total
-    }
-
-    private fun copyTree(from: File, to: File) {
-        to.mkdirs()
-        for (child in from.listFiles().orEmpty()) {
-            if (child.name == ".git" || Files.isSymbolicLink(child.toPath())) continue
-            val target = File(to, child.name)
-            if (child.isDirectory) copyTree(child, target) else child.copyTo(target, overwrite = true)
-        }
-    }
-
     private companion object {
-        const val MAX_PLUGIN_BYTES = 20L * 1024L * 1024L
-        const val MAX_TEMPLATE_BYTES = 256L * 1024L
-        val PLUGIN_ID = Regex("^[a-z0-9][a-z0-9-]{0,47}$")
+        const val MAX_FILE = 1024L * 1024L
+        const val MAX_TOTAL = 10L * 1024L * 1024L
+        val NAME = Regex("^[A-Za-z0-9._-]+$")
         val ACTION_ID = Regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$")
-        val TITLE = Regex("^name:\\s*[\"']?(.+?)[\"']?\\s*$", RegexOption.MULTILINE)
+        val TITLE_NAME = Regex("^name:\\s*[\"']?(.+?)[\"']?\\s*$", RegexOption.MULTILINE)
+        val ROOT_ALLOWED = setOf("assets", "main", "including", "VERSION", "VERSION_SUPPORT", "LICENSE", "README.md", "build.sh")
     }
 }
