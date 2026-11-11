@@ -49,8 +49,12 @@ class RepoDetailController {
     var progressValue by mutableIntStateOf(0)
         private set
 
+    var logOpen by mutableStateOf(false)
+        private set
+
     fun selectTab(index: Int) {
         selectedTab = index
+        if (index != 3) logOpen = false
     }
 
     fun refresh() {
@@ -78,6 +82,14 @@ class RepoDetailController {
         query = value
     }
 
+    fun openLog() {
+        logOpen = true
+    }
+
+    fun closeLog() {
+        logOpen = false
+    }
+
     fun showProgress(message: String, left: String, right: String) {
         progressMessage = message
         progressLeft = left
@@ -98,6 +110,10 @@ class RepoDetailController {
     }
 
     fun consumeBack(): Boolean {
+        if (logOpen) {
+            logOpen = false
+            return true
+        }
         if (operationsOpen) {
             operationsOpen = false
             return true

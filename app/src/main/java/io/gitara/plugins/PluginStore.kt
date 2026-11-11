@@ -142,6 +142,75 @@ class PluginStore(context: Context) {
         )
     }
 
+    fun commandsFor(place: String): List<PluginCommandRef> = list().filter { it.active }.flatMap { info ->
+        val meta = info.meta ?: return@flatMap emptyList<PluginCommandRef>()
+        yamlFiles(File(root, "${info.id}/main/commands")).mapNotNull { file ->
+            val command = PluginFormats.readCommand(file) ?: return@mapNotNull null
+            if (place in PluginExtensionFormats.places(file)) PluginCommandRef(info.id, meta.title, command) else null
+        }
+    }
+
+    fun hooksAllowed(id: String): Boolean = File(root, "$id/.hooks").exists()
+
+    fun setHooksAllowed(id: String, allowed: Boolean) {
+        if (!PluginFormats.ID.matches(id)) return
+        val dir = File(root, id)
+        if (!dir.isDirectory) return
+        val marker = File(dir, ".hooks")
+        if (allowed) marker.createNewFile() else marker.delete()
+    }
+
+    fun hookCount(id: String): Int =
+        yamlFiles(File(root, "$id/main/hooks")).count { PluginExtensionFormats.readHook(it) != null }
+
+    fun hooks(event: String): List<Pair<PluginInfo, PluginHook>> =
+        list().filter { it.active && hooksAllowed(it.id) }.flatMap { info ->
+            yamlFiles(File(root, "${info.id}/main/hooks")).mapNotNull { file ->
+                PluginExtensionFormats.readHook(file)?.takeIf { it.event == event }?.let { info to it }
+            }
+        }
+
+    fun themes(): List<PluginTheme> = list().filter { it.active }.flatMap { info ->
+        yamlFiles(File(root, "${info.id}/main/themes")).mapNotNull { PluginExtensionFormats.readTheme(info.id, it) }
+    }
+
+    fun iconFile(id: String): File? = File(root, "$id/assets/icon.png").takeIf { it.isFile }
+
+    fun hookDefinition(info: PluginInfo, hook: PluginHook, env: Map<String, String>): WorkflowDefinition {
+        val title = info.meta?.title ?: info.id
+        val step = StepDef(
+            id = null,
+            name = hook.name,
+            condition = null,
+            uses = null,
+            withArgs = emptyMap(),
+            script = hook.script,
+            shell = hook.shell,
+            workdir = null,
+            env = emptyMap(),
+            continueOnError = "false",
+            timeoutMinutes = null
+        )
+        val job = JobDef(
+            id = "hook",
+            name = hook.name,
+            needs = emptyList(),
+            condition = null,
+            env = emptyMap(),
+            timeoutMinutes = hook.timeoutMinutes,
+            outputs = emptyMap(),
+            steps = listOf(step)
+        )
+        return WorkflowDefinition(
+            fileName = "plugin-hook:${info.id}/${hook.id}",
+            name = "$title: ${hook.name}",
+            env = env,
+            inputs = emptyMap(),
+            jobs = listOf(job),
+            sandboxed = true
+        )
+    }
+
     fun localCandidates(repoDir: File): List<File> {
         val found = File(repoDir, "plugins").listFiles()
             ?.filter { it.isDirectory && !it.name.startsWith(".") && File(it, "main").isDirectory && File(it, "VERSION").isFile }

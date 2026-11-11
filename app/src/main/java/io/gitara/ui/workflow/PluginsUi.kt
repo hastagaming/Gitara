@@ -1,7 +1,10 @@
 package io.gitara.ui.workflow
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -41,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +58,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +73,8 @@ import io.gitara.plugins.PluginMeta
 import io.gitara.plugins.PluginRepos
 import io.gitara.plugins.PluginRepository
 import io.gitara.plugins.PluginStore
+import io.gitara.plugins.PluginTheme
+import io.gitara.plugins.PluginThemes
 import io.gitara.workflow.WorkflowDefinition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -121,8 +131,8 @@ internal fun PluginsCard(count: Int, onManage: () -> Unit) {
 @Composable
 internal fun PluginsSheet(
     store: PluginStore,
-    repoDir: File,
-    onRunCommand: (WorkflowDefinition) -> Unit,
+    repoDir: File?,
+    onRunCommand: ((WorkflowDefinition) -> Unit)?,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -154,8 +164,18 @@ internal fun PluginsSheet(
     val commands by produceState(emptyList<PluginCommandRef>(), tick) {
         value = withContext(Dispatchers.IO) { store.commands() }
     }
+    val hookCounts by produceState(emptyMap<String, Int>(), tick) {
+        value = withContext(Dispatchers.IO) { store.list().associate { it.id to store.hookCount(it.id) } }
+    }
+    val hookAllowed by produceState(emptyMap<String, Boolean>(), tick) {
+        value = withContext(Dispatchers.IO) { store.list().associate { it.id to store.hooksAllowed(it.id) } }
+    }
+    val themes by produceState(emptyList<PluginTheme>(), tick) {
+        value = withContext(Dispatchers.IO) { store.themes() }
+    }
+    val activeTheme by PluginThemes.active.collectAsState()
     val locals by produceState(emptyList<File>()) {
-        value = withContext(Dispatchers.IO) { store.localCandidates(repoDir) }
+        value = if (repoDir == null) emptyList() else withContext(Dispatchers.IO) { store.localCandidates(repoDir) }
     }
     val selected = repoState.repositories.firstOrNull { PluginRepos.same(it.url, repoState.selected) }
     val synced by produceState<Boolean?>(null, selected?.url, tick) {
@@ -165,6 +185,10 @@ internal fun PluginsSheet(
     val catalog by produceState(emptyList<CatalogPlugin>(), selected?.url, tick) {
         val repo = selected
         value = if (repo == null) emptyList() else withContext(Dispatchers.IO) { repos.catalog(repo) }
+    }
+
+    LaunchedEffect(tick) {
+        withContext(Dispatchers.IO) { PluginThemes.reload(context) }
     }
 
     fun sync(repo: PluginRepository) {
@@ -204,6 +228,17 @@ internal fun PluginsSheet(
         }
     }
 
+    fun applyHooks(id: String, allowed: Boolean) {
+        scope.launch {
+            withContext(Dispatchers.IO) { store.setHooksAllowed(id, allowed) }
+            tick++
+        }
+    }
+
+    fun selectTheme(theme: PluginTheme?) {
+        scope.launch { withContext(Dispatchers.IO) { PluginThemes.select(context, theme) } }
+    }
+
     fun confirmInstall(plugin: CatalogPlugin, repo: PluginRepository, isUpdate: Boolean) {
         val meta = plugin.meta ?: return
         val trust = if (PluginRepos.isOfficial(repo.url, official)) {
@@ -214,7 +249,8 @@ internal fun PluginsSheet(
         pending = PendingAction(
             title = if (isUpdate) "Update plugin?" else "Install plugin?",
             message = "${meta.title} ${meta.version} from ${repo.name}.\n$trust\n\n" +
-                "A plugin can run commands in the Gitara Box. Secrets stay hidden from plugins unless you pass them in with:.",
+                "A plugin can run commands in the Gitara Box and change how the app looks. " +
+                "Secrets stay hidden from plugins unless you pass them in with:. Automatic hooks stay off until you allow them.",
             confirm = if (isUpdate) "Update" else "Install",
             destructive = false
         ) { install(plugin, repo.url) }
@@ -276,15 +312,17 @@ internal fun PluginsSheet(
             } else {
                 Text("Plugins", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "A plugin can run any command in the Gitara Box with access to the open repository. " +
-                        "Secrets are never exposed to plugins unless you pass them in with:. Install only plugins you trust.",
+                    "Plugins can run commands in the Gitara Box, add menu items, react to app events (only if you allow it) " +
+                        "and change the app's colors. They never see your secrets unless you pass them in with:. " +
+                        "Install only plugins you trust.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 TabRow(selectedTabIndex = tab) {
                     Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Installed") })
                     Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Browse") })
-                    Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Repositories") })
+                    Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Repos") })
+                    Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("Themes") })
                 }
 
                 when (tab) {
@@ -295,7 +333,25 @@ internal fun PluginsSheet(
                         installed.forEach { info ->
                             InstalledRow(
                                 info = info,
+                                icon = remember(info.id, tick) { store.iconFile(info.id) },
                                 commands = commands.filter { it.pluginId == info.id },
+                                canRun = onRunCommand != null,
+                                hookCount = hookCounts[info.id] ?: 0,
+                                hooksAllowed = hookAllowed[info.id] == true,
+                                onHooks = { allowed ->
+                                    if (allowed) {
+                                        pending = PendingAction(
+                                            title = "Allow automatic hooks?",
+                                            message = "${info.id} will be able to run scripts in the Gitara Box by itself, " +
+                                                "for example when you open a repository or finish a pull. " +
+                                                "Only allow this for plugins you trust.",
+                                            confirm = "Allow",
+                                            destructive = false
+                                        ) { applyHooks(info.id, true) }
+                                    } else {
+                                        applyHooks(info.id, false)
+                                    }
+                                },
                                 onToggle = { enabled ->
                                     scope.launch {
                                         withContext(Dispatchers.IO) { store.setEnabled(info.id, enabled) }
@@ -320,7 +376,7 @@ internal fun PluginsSheet(
                                 onReadme = {
                                     info.meta?.let { detail = DetailTarget(it, null, info.source, false) }
                                 },
-                                onRun = { ref -> onRunCommand(store.commandDefinition(ref)) }
+                                onRun = { ref -> onRunCommand?.invoke(store.commandDefinition(ref)) }
                             )
                         }
                         if (locals.isNotEmpty()) {
@@ -388,7 +444,7 @@ internal fun PluginsSheet(
                             }
                         }
                     }
-                    else -> {
+                    2 -> {
                         repoState.repositories.forEach { repo ->
                             RepoRow(
                                 repo = repo,
@@ -462,6 +518,31 @@ internal fun PluginsSheet(
                             modifier = Modifier.fillMaxWidth()
                         ) { Text("Add repository") }
                     }
+                    else -> {
+                        Text(
+                            "Pick a color theme provided by an installed plugin. It applies to the whole app.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        ThemeRow(
+                            name = "Default",
+                            subtitle = "Gitara's built-in look",
+                            colors = emptyMap(),
+                            selected = activeTheme == null,
+                            onSelect = { selectTheme(null) }
+                        )
+                        if (themes.isEmpty()) {
+                            Text("No installed plugin provides a theme.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        themes.forEach { theme ->
+                            ThemeRow(
+                                name = theme.name,
+                                subtitle = "plugin:${theme.pluginId}",
+                                colors = theme.light.ifEmpty { theme.dark },
+                                selected = activeTheme?.key == theme.key,
+                                onSelect = { selectTheme(theme) }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -508,9 +589,77 @@ private fun Tag(text: String, color: Color) {
 }
 
 @Composable
+private fun PluginIcon(file: File?) {
+    if (file == null) return
+    val bitmap by produceState<ImageBitmap?>(null, file.path) {
+        value = withContext(Dispatchers.IO) { decodeIcon(file) }
+    }
+    val image = bitmap ?: return
+    Box(Modifier.padding(end = 10.dp)) {
+        Image(bitmap = image, contentDescription = null, modifier = Modifier.size(40.dp))
+    }
+}
+
+private fun decodeIcon(file: File): ImageBitmap? {
+    if (file.length() > 1_048_576L) return null
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.path, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= 128 && bounds.outHeight / (sample * 2) >= 128) sample *= 2
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    return BitmapFactory.decodeFile(file.path, options)?.asImageBitmap()
+}
+
+@Composable
+private fun ThemeRow(
+    name: String,
+    subtitle: String,
+    colors: Map<String, Int>,
+    selected: Boolean,
+    onSelect: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = scheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, if (selected) scheme.primary else scheme.outline)
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+                if (colors.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("primary", "background", "surface", "error").forEach { key ->
+                            colors[key]?.let { argb ->
+                                Box(
+                                    Modifier
+                                        .size(18.dp)
+                                        .background(Color(argb), CircleShape)
+                                        .border(1.dp, scheme.outline, CircleShape)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (selected) Tag("In use", scheme.primary) else Button(onClick = onSelect) { Text("Use") }
+        }
+    }
+}
+
+@Composable
 private fun InstalledRow(
     info: PluginInfo,
+    icon: File?,
     commands: List<PluginCommandRef>,
+    canRun: Boolean,
+    hookCount: Int,
+    hooksAllowed: Boolean,
+    onHooks: (Boolean) -> Unit,
     onToggle: (Boolean) -> Unit,
     onUninstall: () -> Unit,
     onReadme: () -> Unit,
@@ -526,6 +675,7 @@ private fun InstalledRow(
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                PluginIcon(icon)
                 Column(Modifier.weight(1f)) {
                     Text(meta?.title ?: info.id, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text(
@@ -551,7 +701,20 @@ private fun InstalledRow(
             if (meta != null) {
                 TextButton(onClick = onReadme) { Text("README") }
             }
-            if (info.active) {
+            if (info.active && hookCount > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Automatic hooks ($hookCount)", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Run scripts on app events such as opening a repository or finishing a pull.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = hooksAllowed, onCheckedChange = onHooks)
+                }
+            }
+            if (info.active && canRun) {
                 commands.forEach { ref ->
                     OutlinedButton(
                         onClick = { onRun(ref) },
@@ -587,6 +750,7 @@ private fun CatalogRow(
 ) {
     val scheme = MaterialTheme.colorScheme
     val meta = plugin.meta
+    val icon = remember(plugin.dir.path) { File(plugin.dir, "assets/icon.png").takeIf { it.isFile } }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -594,39 +758,44 @@ private fun CatalogRow(
         border = BorderStroke(1.dp, if (meta == null) scheme.error.copy(alpha = 0.6f) else scheme.outline)
     ) {
         Column(Modifier.padding(14.dp)) {
-            Text(meta?.title ?: plugin.id, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text(
-                plugin.id,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-                color = scheme.onSurfaceVariant
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PluginIcon(icon)
+                Column(Modifier.weight(1f)) {
+                    Text(meta?.title ?: plugin.id, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        plugin.id,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+            }
             if (meta == null) {
                 Spacer(Modifier.height(4.dp))
                 Text(plugin.error ?: "Invalid plugin", style = MaterialTheme.typography.bodySmall, color = scheme.error)
-                return@Column
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Tag("v" + meta.version, scheme.primary)
-                if (installedVersion != null) Tag("Installed v$installedVersion", scheme.onSurfaceVariant)
-                if (!compatible) Tag("Not for this Gitara", scheme.error)
-            }
-            Text(
-                "Supports Gitara " + meta.supported.joinToString(", "),
-                style = MaterialTheme.typography.labelSmall,
-                color = scheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onDetails) { Text("Details") }
-                Spacer(Modifier.weight(1f))
-                val label = when {
-                    installedVersion == null -> "Install"
-                    PluginFormats.compareVersions(meta.version, installedVersion) > 0 -> "Update"
-                    else -> "Reinstall"
+            } else {
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Tag("v" + meta.version, scheme.primary)
+                    if (installedVersion != null) Tag("Installed v$installedVersion", scheme.onSurfaceVariant)
+                    if (!compatible) Tag("Not for this Gitara", scheme.error)
                 }
-                Button(onClick = onInstall, enabled = compatible && !busy) { Text(label) }
+                Text(
+                    "Supports Gitara " + meta.supported.joinToString(", "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onDetails) { Text("Details") }
+                    Spacer(Modifier.weight(1f))
+                    val label = when {
+                        installedVersion == null -> "Install"
+                        PluginFormats.compareVersions(meta.version, installedVersion) > 0 -> "Update"
+                        else -> "Reinstall"
+                    }
+                    Button(onClick = onInstall, enabled = compatible && !busy) { Text(label) }
+                }
             }
         }
     }
@@ -705,7 +874,10 @@ private fun PluginDetail(
         }
         add("Provides: ${meta.actions} action(s), ${meta.templates} template(s), ${meta.commands} command(s)")
         if (target.repoUrl.isNotEmpty()) {
-            add("Source: ${target.repoUrl}" + if (target.plugin != null) (if (target.official) "  (official)" else "  (not on the official list)") else "")
+            add(
+                "Source: ${target.repoUrl}" +
+                    if (target.plugin != null) (if (target.official) "  (official)" else "  (not on the official list)") else ""
+            )
         }
     }
     lines.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }

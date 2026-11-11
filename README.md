@@ -137,13 +137,14 @@ The Box is an Alpine Linux root filesystem that runs through [proot](https://pro
 
 ## Plugins
 
-Plugins add workflow actions, workflow templates and one-tap commands. They come from plugin repositories, and the default one is the **Gitara Community Repository**, [GCR](https://github.com/hastagaming/GCR).
+Plugins extend the whole app, not only workflows. They can add workflow actions and templates, one-tap commands in menus across the app, scripts that react to app events (only after you allow them) and color themes. They come from plugin repositories, and the default one is the **Gitara Community Repository**, [GCR](https://github.com/hastagaming/GCR).
 
-Open **Actions → Plugins** inside a repository:
+Open **Plugins** from the ⋮ menu of the repository list, or from **Actions → Plugins** inside a repository:
 
+- **Installed** lets you disable, uninstall, run commands and allow automatic hooks. If you cloned a fork of GCR in Gitara, you can also install a plugin from it for testing.
 - **Browse** shows the plugins of the selected repository, with their README, supported Gitara versions and dependencies.
-- **Installed** lets you disable, uninstall and run plugin commands. If you cloned a fork of GCR in Gitara, you can also install a plugin from it for testing.
-- **Repositories** lets you add other people's plugin repositories and choose which one is the default.
+- **Repos** lets you add other people's plugin repositories and choose which one is the default.
+- **Themes** switches the color theme of the whole app.
 
 A plugin only works with the Gitara versions it lists in its `VERSION_SUPPORT` file. Plugin actions and commands never see your secrets unless you pass them in with `with:`.
 

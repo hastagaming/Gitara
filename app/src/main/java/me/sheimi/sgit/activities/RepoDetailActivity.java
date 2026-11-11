@@ -26,6 +26,8 @@ import me.sheimi.sgit.fragments.FilesFragment;
 import me.sheimi.sgit.fragments.StatusFragment;
 import me.sheimi.sgit.repo.tasks.SheimiAsyncTask.AsyncTaskCallback;
 
+import io.gitara.plugins.PluginEvents;
+
 public class RepoDetailActivity extends SheimiFragmentActivity implements RepoDetailHost {
 
     private static final int FILES_FRAGMENT_INDEX = 0;
@@ -82,6 +84,7 @@ public class RepoDetailActivity extends SheimiFragmentActivity implements RepoDe
         }
         setContentView(RepoDetailComposeEntry.create(this, mController, this, mRepo));
         applySystemBarIcons();
+        PluginEvents.repoOpened(this, mRepo);
     }
 
     @Override
@@ -344,6 +347,8 @@ public class RepoDetailActivity extends SheimiFragmentActivity implements RepoDe
         public void onPostExecute(Boolean isSuccess) {
             mController.hideProgress();
             reset();
+            PluginEvents.operationFinished(
+                    RepoDetailActivity.this, mRepo, mInitMsg, Boolean.TRUE.equals(isSuccess));
         }
 
         @Override

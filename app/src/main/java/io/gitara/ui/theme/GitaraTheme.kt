@@ -11,6 +11,9 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
@@ -18,6 +21,9 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.gitara.hosting.GitHost
+import io.gitara.plugins.PluginThemes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 internal data class Accent(val light: Color, val dark: Color)
 
@@ -96,6 +102,34 @@ private val GitaraShapes = Shapes(
     extraLarge = RoundedCornerShape(12.dp)
 )
 
+private fun ColorScheme.withOverride(colors: Map<String, Int>?): ColorScheme {
+    if (colors.isNullOrEmpty()) return this
+    fun pick(key: String, fallback: Color): Color = colors[key]?.let { Color(it) } ?: fallback
+    return copy(
+        primary = pick("primary", primary),
+        onPrimary = pick("onPrimary", onPrimary),
+        primaryContainer = pick("primaryContainer", primaryContainer),
+        onPrimaryContainer = pick("onPrimaryContainer", onPrimaryContainer),
+        secondary = pick("secondary", secondary),
+        onSecondary = pick("onSecondary", onSecondary),
+        background = pick("background", background),
+        onBackground = pick("onBackground", onBackground),
+        surface = pick("surface", surface),
+        onSurface = pick("onSurface", onSurface),
+        surfaceVariant = pick("surfaceVariant", surfaceVariant),
+        onSurfaceVariant = pick("onSurfaceVariant", onSurfaceVariant),
+        surfaceContainerLowest = pick("surfaceContainerLowest", surfaceContainerLowest),
+        surfaceContainerLow = pick("surfaceContainerLow", surfaceContainerLow),
+        surfaceContainer = pick("surfaceContainer", surfaceContainer),
+        surfaceContainerHigh = pick("surfaceContainerHigh", surfaceContainerHigh),
+        surfaceContainerHighest = pick("surfaceContainerHighest", surfaceContainerHighest),
+        outline = pick("outline", outline),
+        outlineVariant = pick("outlineVariant", outlineVariant),
+        error = pick("error", error),
+        onError = pick("onError", onError)
+    )
+}
+
 @Composable
 fun GitaraTheme(
     host: GitHost = GitHost.GENERIC,
@@ -103,8 +137,13 @@ fun GitaraTheme(
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val context = LocalContext.current
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { PluginThemes.ensureLoaded(context) }
+    }
+    val pluginTheme by PluginThemes.active.collectAsState()
+
+    val base = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
         remember(host, darkTheme) {
@@ -112,9 +151,12 @@ fun GitaraTheme(
             if (darkTheme) darkScheme(accent.dark) else lightScheme(accent.light)
         }
     }
+    val scheme = remember(base, pluginTheme, darkTheme) {
+        base.withOverride(if (darkTheme) pluginTheme?.dark else pluginTheme?.light)
+    }
 
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = scheme,
         shapes = GitaraShapes,
         content = content
     )

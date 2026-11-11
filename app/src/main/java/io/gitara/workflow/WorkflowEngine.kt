@@ -10,6 +10,7 @@ import io.gitara.box.ProcessOutcome
 import io.gitara.box.deleteTree
 import io.gitara.secrets.SecretStore
 import io.gitara.plugins.PluginStore
+import io.gitara.plugins.PluginEvents
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -229,7 +230,8 @@ private class Runner(
         }
         totalSteps = records.size
     }
-
+    @Volatile
+    var finalResult: RunStatus = RunStatus.FAILED
     fun initialRecords(): List<StepRecord> = records.toList()
 
     fun execute() {
@@ -273,9 +275,7 @@ private class Runner(
             finalStatus = RunStatus.FAILED
             summary = t.message ?: "Unexpected error"
         } finally {
-            for (i in records.indices) {
-                if (records[i].status == StepStatus.PENDING) records[i] = records[i].copy(status = StepStatus.SKIPPED)
-            }
+            finalResult = finalStatus
             publish(records.toList())
             log.line("")
             log.line("Run ${finalStatus.name.lowercase(Locale.ROOT)}: $summary")
@@ -730,6 +730,9 @@ object WorkflowEngine {
             } finally {
                 handles.remove(repoId)
                 mutableState.update { it.copy(live = it.live - repoId, finishedTick = it.finishedTick + 1) }
+                if (!definition.sandboxed) {
+                    PluginEvents.workflowFinished(appContext, repo, definition.name, runner.finalResult)
+                }
             }
         }, "gitara-workflow-$repoId").start()
 

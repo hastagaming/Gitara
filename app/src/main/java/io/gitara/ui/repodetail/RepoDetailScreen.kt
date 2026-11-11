@@ -64,6 +64,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import io.gitara.plugins.PluginCommandRef
+import io.gitara.plugins.PluginStore
+import io.gitara.workflow.WorkflowEngine
+import kotlinx.coroutines.launch
 import io.gitara.hosting.GitHost
 import io.gitara.ui.theme.GitaraTheme
 import io.gitara.ui.theme.accentFor
@@ -273,6 +280,28 @@ private fun RepoDetailScreen(
                         host.createOperationsList(ctx).apply { setBackgroundColor(surfaceArgb) }
                     }
                 )
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
+                val pluginStore = remember { PluginStore(context.applicationContext) }
+                val pluginCommands by produceState(emptyList<PluginCommandRef>()) {
+                    value = withContext(Dispatchers.IO) { pluginStore.commandsFor("repo-actions") }
+                }
+                pluginCommands.forEach { ref ->
+                    TextButton(
+                        onClick = {
+                            controller.closeOperations()
+                            controller.selectTab(ACTIONS_TAB)
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    WorkflowEngine.start(context.applicationContext, repo, pluginStore.commandDefinition(ref), emptyMap())
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp)
+                    ) { Text(ref.command.name) }
+                }
             }
         }
     }

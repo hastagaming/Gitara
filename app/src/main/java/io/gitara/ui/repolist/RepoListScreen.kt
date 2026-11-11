@@ -97,6 +97,11 @@ import androidx.compose.ui.unit.dp
 import io.gitara.hosting.GitHost
 import io.gitara.ui.theme.GitaraTheme
 import io.gitara.ui.theme.accentFor
+import io.gitara.plugins.PluginCommandRef
+import io.gitara.plugins.PluginStore
+import io.gitara.ui.workflow.PluginsSheet
+import io.gitara.workflow.StartResult
+import io.gitara.workflow.WorkflowEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -132,6 +137,11 @@ private fun RepoListScreen(controller: RepoListController, host: RepoListHost) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    val pluginStore = remember { PluginStore(context.applicationContext) }
+    var showPlugins by remember { mutableStateOf(false) }
+    val cardCommands by produceState(emptyList<PluginCommandRef>(), showPlugins) {
+        value = withContext(Dispatchers.IO) { pluginStore.commandsFor("repo-card") }
+    }
 
     var localTick by remember { mutableIntStateOf(0) }
     val loaded by produceState<List<RepoItem>?>(initialValue = null, controller.refreshTick, localTick) {
@@ -214,6 +224,7 @@ private fun RepoListScreen(controller: RepoListController, host: RepoListHost) {
                 },
                 onImport = { host.onImportRepo() },
                 onSettings = { host.onOpenSettings() }
+                onPlugins = { showPlugins = true },
             )
         },
         floatingActionButton = {
@@ -300,6 +311,23 @@ private fun RepoListScreen(controller: RepoListController, host: RepoListHost) {
                     actionTarget = null
                     host.onOpenRepo(item.repo)
                 }
+                cardCommands.forEach { ref ->
+                    ActionRow(ref.command.name) {
+                        actionTarget = null
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                WorkflowEngine.start(context.applicationContext, item.repo, pluginStore.commandDefinition(ref), emptyMap())
+                            }
+                            snackbar.showSnackbar(
+                                when (result) {
+                                    is StartResult.Started -> "Running ${ref.command.name}"
+                                    StartResult.AlreadyRunning -> "A workflow is already running in this repository"
+                                    is StartResult.Failed -> result.message
+                                }
+                            )
+                        }
+                    }
+                }
                 if (item.remoteUrl.isNotBlank()) {
                     ActionRow("Copy remote URL") {
                         copyText(context, "Remote URL", item.remoteUrl)
@@ -369,6 +397,14 @@ private fun RepoListScreen(controller: RepoListController, host: RepoListHost) {
             }
         )
     }
+    if (showPlugins) {
+        PluginsSheet(
+            store = pluginStore,
+            repoDir = null,
+            onRunCommand = null,
+            onDismiss = { showPlugins = false }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -379,7 +415,8 @@ private fun RepoTopBar(
     onQueryChange: (String) -> Unit,
     onSearchToggle: (Boolean) -> Unit,
     onImport: () -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    onPlugins: () -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
@@ -447,6 +484,13 @@ private fun RepoTopBar(
                             onClick = {
                                 menuOpen = false
                                 onSettings()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Plugins") },
+                            onClick = {
+                                menuOpen = false
+                                onPlugins()
                             }
                         )
                     }
